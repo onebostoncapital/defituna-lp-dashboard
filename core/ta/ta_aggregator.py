@@ -8,53 +8,35 @@ from core.ta.trend_strength import calculate_trend_strength
 
 def aggregate_ta_signals(price_series):
     """
-    Aggregate all TA indicators into one TA signal.
+    Aggregate all TA indicators into a single TA score.
     """
 
-    ta_results = {
-        "ma20": calculate_ma20(price_series),
-        "ma200": calculate_ma200(price_series),
-        "crossover": calculate_ma_crossover(price_series),
-        "rsi": calculate_rsi(price_series),
-        "volatility": calculate_volatility(price_series),
-        "trend_strength": calculate_trend_strength(price_series),
+    indicators = {
+        "MA20": calculate_ma20(price_series),
+        "MA200": calculate_ma200(price_series),
+        "Crossover": calculate_ma_crossover(price_series),
+        "RSI": calculate_rsi(price_series),
+        "Volatility": calculate_volatility(price_series),
+        "Trend Strength": calculate_trend_strength(price_series),
     }
 
-    total_score = sum(item["score"] for item in ta_results.values())
+    total_score = 0.0
+    drivers = []
 
-    # -----------------------------
-    # Direction decision
-    # -----------------------------
-    if total_score > 20:
-        direction = "Bullish"
-    elif total_score < -20:
-        direction = "Bearish"
-    else:
-        direction = "Neutral"
+    for name, result in indicators.items():
+        if not result:
+            continue
 
-    # -----------------------------
-    # Confidence calculation (centralized)
-    # -----------------------------
-    max_possible_score = 95  # sum of max scores
-    confidence = min(abs(total_score) / max_possible_score, 1.0)
+        score = float(result.get("score", 0.0))
+        confidence = float(result.get("confidence", 0.0))
+        signal = result.get("signal", "Neutral")
 
-    # -----------------------------
-    # AI-style confidence multiplier
-    # -----------------------------
-    if abs(total_score) > 50:
-        confidence_multiplier = 1.2
-    elif abs(total_score) < 20:
-        confidence_multiplier = 0.8
-    else:
-        confidence_multiplier = 1.0
+        total_score += score * confidence
 
-    drivers = [item["driver"] for item in ta_results.values() if item["driver"]]
+        if signal != "Neutral":
+            drivers.append(f"{name}: {signal}")
 
     return {
-        "direction": direction,
-        "score": total_score,
-        "confidence": round(confidence, 2),
-        "confidence_multiplier": confidence_multiplier,
-        "drivers": drivers,
-        "raw": ta_results
+        "ta_score": round(total_score, 3),
+        "drivers": drivers
     }
