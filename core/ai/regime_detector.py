@@ -1,21 +1,27 @@
 import pandas as pd
-import numpy as np
 
 
-def detect_market_regime(price_series: pd.Series) -> str:
+def detect_market_regime(price_input) -> str:
     """
-    Detect market regime:
-    - Trending
-    - Choppy
-    - High-Risk
+    Robust market regime detection.
+    Works with Series or DataFrame.
     """
 
-    # Ensure clean numeric series
-    price_series = (
-        pd.Series(price_series)
-        .astype(float)
-        .dropna()
-    )
+    # -----------------------------
+    # Normalize input to Series
+    # -----------------------------
+    if isinstance(price_input, pd.DataFrame):
+        # Try common column names
+        for col in ["close", "Close", "price", "Price"]:
+            if col in price_input.columns:
+                price_series = price_input[col]
+                break
+        else:
+            return "Unknown"
+    else:
+        price_series = pd.Series(price_input)
+
+    price_series = price_series.astype(float).dropna()
 
     if len(price_series) < 60:
         return "Unknown"
@@ -26,24 +32,13 @@ def detect_market_regime(price_series: pd.Series) -> str:
     ma_fast = price_series.rolling(20).mean()
     ma_slow = price_series.rolling(50).mean()
 
-    spread_latest = float((ma_fast - ma_slow).iloc[-1])
+    ma_spread = ma_fast - ma_slow
+
+    spread_latest = float(ma_spread.iloc[-1])
+    spread_prev = float(ma_spread.iloc[-5])
 
     # -----------------------------
-    # Trend slope (last 20 periods)
-    # -----------------------------
-    recent_prices = price_series.iloc[-20:].astype(float)
-
-    x = np.arange(len(recent_prices), dtype=float)
-    y = recent_prices.to_numpy(dtype=float)
-
-    # Guard against numerical issues
-    if len(x) < 2:
-        return "Unknown"
-
-    slope = float(np.polyfit(x, y, 1)[0])
-
-    # -----------------------------
-    # Volatility comparison
+    # Volatility analysis
     # -----------------------------
     returns = price_series.pct_change().dropna()
 
@@ -51,9 +46,9 @@ def detect_market_regime(price_series: pd.Series) -> str:
     long_vol = float(returns.iloc[-60:].std())
 
     # -----------------------------
-    # Regime rules
+    # Regime rules (simple & robust)
     # -----------------------------
-    if abs(spread_latest) > 1.0 and abs(slope) > 0.01 and recent_vol <= long_vol:
+    if abs(spread_latest) > abs(spread_prev) and recent_vol <= long_vol:
         return "Trending"
 
     if recent_vol > long_vol * 1.5:
