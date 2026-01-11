@@ -1,3 +1,15 @@
+# =================================================
+# STREAMLIT CLOUD IMPORT FIX (MUST BE FIRST)
+# =================================================
+import os
+import sys
+
+PROJECT_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
+sys.path.insert(0, PROJECT_ROOT)
+
+# =================================================
+# STANDARD IMPORTS
+# =================================================
 import streamlit as st
 
 # -----------------------------
@@ -16,9 +28,9 @@ from core.strategy.range_engine import generate_range_and_liquidation
 from core.fa.fa_aggregator import aggregate_fa_signals
 
 
-# -----------------------------
-# Streamlit setup
-# -----------------------------
+# =================================================
+# STREAMLIT UI
+# =================================================
 st.set_page_config(
     page_title="DefiTuna LP Dashboard",
     layout="wide"
@@ -42,10 +54,12 @@ if current_price is None or price_history is None:
 # Run engines
 # -----------------------------
 fusion_output = fuse_signals(price_history)
+
 range_output = generate_range_and_liquidation(
     current_price=current_price,
     fusion_output=fusion_output
 )
+
 fa_output = aggregate_fa_signals()
 
 # -----------------------------
@@ -113,7 +127,7 @@ else:
     st.write("No active fundamental risk flags.")
 
 # -----------------------------
-# SECTION 7: News Feed (Clickable)
+# SECTION 7: News Feed
 # -----------------------------
 st.markdown("## 📰 News Feed")
 
@@ -130,7 +144,7 @@ render_news("🌍 Macro News", fa_output.get("macro_news", []))
 render_news("⚠️ Geopolitical Risk", fa_output.get("geopolitical_news", []))
 
 # -----------------------------
-# SECTION 8: System Explanation
+# SECTION 8: Explanation
 # -----------------------------
 st.markdown("## 📝 System Explanation")
 st.write(range_output["explanation"])
