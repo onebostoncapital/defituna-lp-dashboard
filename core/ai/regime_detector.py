@@ -1,68 +1,50 @@
 import pandas as pd
+import numpy as np
 
 
-def detect_market_regime(price_series: pd.Series):
+def detect_market_regime(price_series: pd.Series) -> str:
     """
-    Detect market regime: Trending, Ranging, or Transition.
-
-    Input:
-        price_series: pandas Series of closing prices (latest last)
-
-    Output (dict):
-        - regime: Trending / Ranging / Transition
-        - score: int (-30 to +30)
-        - confidence: float (0 to 1)
-        - explanation: str
+    Detect market regime:
+    - Trending
+    - Choppy
+    - High-Risk
     """
 
-    # Safety check
-    if price_series is None or len(price_series) < 200:
-        return {
-            "regime": "Transition",
-            "score": 0,
-            "confidence": 0.0,
-            "explanation": "Insufficient data to determine market regime."
-        }
+    if len(price_series) < 60:
+        return "Unknown"
 
+    # -----------------------------
     # Moving averages
-    ma20 = price_series.rolling(window=20).mean()
-    ma200 = price_series.rolling(window=200).mean()
+    # -----------------------------
+    ma_fast = price_series.rolling(20).mean()
+    ma_slow = price_series.rolling(50).mean()
 
-    ma_spread = (ma20 - ma200) / ma200 * 100
-    spread_latest = ma_spread.iloc[-1]
+    spread = ma_fast - ma_slow
 
-    # Price slope (trend persistence)
-    slope = price_series.diff().rolling(window=20).mean().iloc[-1]
+    spread_latest = float(spread.iloc[-1])
 
-    # Volatility
+    # -----------------------------
+    # Trend slope (last 20 periods)
+    # -----------------------------
+    recent_prices = price_series.iloc[-20:]
+    x = np.arange(len(recent_prices))
+    slope = float(np.polyfit(x, recent_prices.values, 1)[0])
+
+    # -----------------------------
+    # Volatility comparison
+    # -----------------------------
     returns = price_series.pct_change().dropna()
-    recent_vol = returns.rolling(window=20).std().iloc[-1] * 100
-    long_vol = returns.rolling(window=60).std().iloc[-1] * 100
 
-    # Regime logic
-    if abs(spread_latest) > 1.0 and abs(slope) > 0 and recent_vol >= long_vol:
-        regime = "Trending"
-        score = 30
-        confidence = min(abs(spread_latest) / 3, 1.0)
-    elif abs(spread_latest) < 0.5 and recent_vol < long_vol:
-        regime = "Ranging"
-        score = -20
-        confidence = min((long_vol - recent_vol) / long_vol, 1.0)
-    else:
-        regime = "Transition"
-        score = 0
-        confidence = 0.5
+    recent_vol = float(returns.iloc[-20:].std())
+    long_vol = float(returns.iloc[-60:].std())
 
-    # Explanation
-    explanation = (
-        f"MA spread is {spread_latest:.2f}%, "
-        f"recent volatility is {recent_vol:.2f}%, "
-        f"indicating a {regime.lower()} market regime."
-    )
+    # -----------------------------
+    # Regime rules
+    # -----------------------------
+    if abs(spread_latest) > 1.0 and abs(slope) > 0.01 and recent_vol <= long_vol:
+        return "Trending"
 
-    return {
-        "regime": regime,
-        "score": score,
-        "confidence": round(confidence, 2),
-        "explanation": explanation
-    }
+    if recent_vol > long_vol * 1.5:
+        return "High-Risk"
+
+    return "Choppy"
