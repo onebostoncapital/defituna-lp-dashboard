@@ -10,6 +10,13 @@ def detect_market_regime(price_series: pd.Series) -> str:
     - High-Risk
     """
 
+    # Ensure clean numeric series
+    price_series = (
+        pd.Series(price_series)
+        .astype(float)
+        .dropna()
+    )
+
     if len(price_series) < 60:
         return "Unknown"
 
@@ -19,16 +26,21 @@ def detect_market_regime(price_series: pd.Series) -> str:
     ma_fast = price_series.rolling(20).mean()
     ma_slow = price_series.rolling(50).mean()
 
-    spread = ma_fast - ma_slow
-
-    spread_latest = float(spread.iloc[-1])
+    spread_latest = float((ma_fast - ma_slow).iloc[-1])
 
     # -----------------------------
     # Trend slope (last 20 periods)
     # -----------------------------
-    recent_prices = price_series.iloc[-20:]
-    x = np.arange(len(recent_prices))
-    slope = float(np.polyfit(x, recent_prices.values, 1)[0])
+    recent_prices = price_series.iloc[-20:].astype(float)
+
+    x = np.arange(len(recent_prices), dtype=float)
+    y = recent_prices.to_numpy(dtype=float)
+
+    # Guard against numerical issues
+    if len(x) < 2:
+        return "Unknown"
+
+    slope = float(np.polyfit(x, y, 1)[0])
 
     # -----------------------------
     # Volatility comparison
