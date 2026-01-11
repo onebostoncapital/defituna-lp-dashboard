@@ -1,86 +1,98 @@
 from core.ta.ta_aggregator import aggregate_ta_signals
 from core.fa.fa_aggregator import aggregate_fa_signals
+from core.ai.regime_detector import detect_market_regime
+from core.ai.confidence_calibrator import calibrate_confidence
+
+from core.strategy.multi_range_engine import generate_multi_ranges
+
+
+def select_active_mode(confidence: float) -> str:
+    """
+    Auto-select LP mode based on confidence.
+    """
+    if confidence < 0.4:
+        return "Defensive"
+    elif confidence < 0.7:
+        return "Balanced"
+    else:
+        return "Aggressive"
 
 
 def fuse_signals(price_series):
     """
-    Fuse TA + AI + FA into a single master decision.
-
-    Output (dict):
-        - final_direction: Bullish / Bearish / Neutral
-        - final_score: int (-100 to +100)
-        - final_confidence: float (0 to 1)
-        - risk_mode: Normal / Defensive / High-Risk
-        - active_risk_flags: list
-        - explanation: str
+    Fuse TA, FA, AI and activate multi-range strategy.
     """
 
     # -----------------------------
-    # 1. Collect inputs
+    # Technical Analysis
     # -----------------------------
-    ta = aggregate_ta_signals(price_series)
-    fa = aggregate_fa_signals()
-
-    explanation_parts = []
+    ta_output = aggregate_ta_signals(price_series)
 
     # -----------------------------
-    # 2. Resolve risk mode
+    # Fundamental Analysis
     # -----------------------------
-    if "HIGH_IMPACT_CALENDAR_EVENT" in fa["risk_flags"] or "GEO_RISK_HIGH" in fa["risk_flags"]:
-        risk_mode = "High-Risk"
-        explanation_parts.append("High-impact event or geopolitical risk detected.")
-    elif fa["fa_bias"] != "Neutral" or ta["confidence"] < 0.4:
-        risk_mode = "Defensive"
-        explanation_parts.append("Elevated macro or confidence risk detected.")
+    fa_output = aggregate_fa_signals()
+
+    # -----------------------------
+    # AI Enhancements
+    # -----------------------------
+    regime = detect_market_regime(price_series)
+    confidence = calibrate_confidence(
+        ta_output["ta_score"],
+        fa_output["fa_score"],
+        regime
+    )
+
+    # -----------------------------
+    # Direction Logic
+    # -----------------------------
+    if ta_output["ta_score"] > 0.5 and fa_output["fa_score"] > 0:
+        direction = "Bullish"
+    elif ta_output["ta_score"] < -0.5 and fa_output["fa_score"] < 0:
+        direction = "Bearish"
     else:
-        risk_mode = "Normal"
-        explanation_parts.append("No elevated external risk detected.")
+        direction = "Neutral"
 
     # -----------------------------
-    # 3. Resolve final direction
+    # Volatility (annualized %)
     # -----------------------------
-    final_direction = ta["direction"]
-
-    if risk_mode == "High-Risk":
-        final_direction = "Neutral"
-        explanation_parts.append("Direction neutralized due to high-risk environment.")
-    elif fa["fa_bias"] == "Bearish" and ta["direction"] == "Bullish":
-        final_direction = "Neutral"
-        explanation_parts.append("Bullish TA suppressed by bearish FA context.")
-    elif fa["fa_bias"] == "Bullish" and ta["direction"] == "Bearish":
-        final_direction = "Neutral"
-        explanation_parts.append("Bearish TA suppressed by bullish FA context.")
+    returns = price_series.pct_change().dropna()
+    volatility_pct = returns.std() * (252 ** 0.5)
 
     # -----------------------------
-    # 4. Resolve confidence
+    # Multi-Range Engine
     # -----------------------------
-    final_confidence = ta["confidence"]
-
-    # Apply AI confidence multiplier
-    final_confidence *= ta["confidence_multiplier"]
-
-    # Apply FA confidence penalty
-    final_confidence *= fa["confidence"]
-
-    final_confidence = max(min(final_confidence, 1.0), 0.0)
-
-    explanation_parts.append(f"Final confidence calibrated to {round(final_confidence, 2)}.")
+    multi_range_output = generate_multi_ranges(
+        current_price=price_series.iloc[-1],
+        volatility_pct=volatility_pct,
+        confidence=confidence,
+        direction=direction
+    )
 
     # -----------------------------
-    # 5. Final score
+    # Active Mode Selection
     # -----------------------------
-    final_score = ta["score"] * ta["confidence_multiplier"]
-    final_score = max(min(final_score, 100), -100)
+    active_mode = select_active_mode(confidence)
+
+    active_range = multi_range_output["ranges"][active_mode]
+    active_allocation = multi_range_output["allocation"][active_mode]
 
     # -----------------------------
-    # 6. Output
+    # Final Output
     # -----------------------------
     return {
-        "final_direction": final_direction,
-        "final_score": round(final_score, 2),
-        "final_confidence": round(final_confidence, 2),
-        "risk_mode": risk_mode,
-        "active_risk_flags": fa["risk_flags"],
-        "ta_drivers": ta["drivers"],
-        "explanation": " ".join(explanation_parts)
+        "final_direction": direction,
+        "risk_mode": regime,
+        "final_confidence": round(confidence, 2),
+
+        "ta_score": ta_output["ta_score"],
+        "fa_score": fa_output["fa_score"],
+        "ta_drivers": ta_output["drivers"],
+
+        "multi_ranges": multi_range_output,
+
+        # 🔑 ACTIVE STRATEGY
+        "active_mode": active_mode,
+        "active_range": active_range,
+        "active_allocation": active_allocation
     }
