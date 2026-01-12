@@ -61,7 +61,7 @@ st.write(f"**Regime:** {fusion_output.get('risk_mode')}")
 st.write(f"**Confidence:** {fusion_output.get('final_confidence')}")
 
 # =================================================
-# SECTION 3 — ACTIVE LP STRATEGY (RESTORED METRICS)
+# SECTION 3 — ACTIVE LP STRATEGY
 # =================================================
 st.markdown("## ⭐ Active LP Strategy")
 
@@ -91,7 +91,40 @@ st.info(
 st.divider()
 
 # =================================================
-# SECTION 4 — TECHNICAL DRIVERS
+# SECTION 4 — MULTI-RANGE COMPARISON (RESTORED)
+# =================================================
+st.markdown("## 🧩 Liquidity Ranges (All Modes)")
+
+multi_ranges = fusion_output.get("multi_ranges", {})
+ranges = multi_ranges.get("ranges", {})
+allocations = multi_ranges.get("allocation", {})
+
+for mode in ["Defensive", "Balanced", "Aggressive"]:
+    mode_range = ranges.get(mode, {})
+    mode_alloc = allocations.get(mode, 0.0)
+    is_active = mode == active_mode
+
+    st.subheader(f"{mode} Mode {'⭐ ACTIVE' if is_active else ''}")
+
+    col1, col2, col3 = st.columns(3)
+
+    col1.metric("Range Low", f"${mode_range.get('range_low', '—')}")
+    col2.metric("Range High", f"${mode_range.get('range_high', '—')}")
+    col3.metric("Width (%)", f"{mode_range.get('width_pct', '—')}")
+
+    st.write(
+        f"**Liquidity Allocation:** {int(mode_alloc * 100)}% | "
+        f"**Liquidity Floor:** "
+        f"{int(mode_range.get('liquidity_floor', 0) * 100)}%"
+    )
+
+    if is_active:
+        st.success("This mode is currently ACTIVE")
+
+    st.divider()
+
+# =================================================
+# SECTION 5 — TECHNICAL DRIVERS
 # =================================================
 st.markdown("## 🧮 Technical Drivers")
 
