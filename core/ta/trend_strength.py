@@ -1,66 +1,35 @@
 import pandas as pd
+import numpy as np
 
 
-def calculate_trend_strength(price_series: pd.DataFrame, window: int = 20):
+def calculate_trend_strength(price_series, lookback=20):
     """
-    Calculate trend strength using directional movement consistency.
-    Uses latest value only.
+    Trend strength calculated from a Pandas Series (MASTER RULE).
     """
 
-    if price_series is None or price_series.empty:
-        return {
-            "signal": "Neutral",
-            "score": 0,
-            "driver": "Trend data unavailable"
-        }
+    price_series = pd.to_numeric(price_series, errors="coerce").dropna()
 
-    close = price_series["close"]
+    if len(price_series) < lookback:
+        return {"signal": "Neutral", "confidence": 0.0}
 
-    price_diff = close.diff()
+    recent_prices = price_series.iloc[-lookback:]
 
-    up_moves = price_diff.where(price_diff > 0, 0)
-    down_moves = -price_diff.where(price_diff < 0, 0)
+    # Calculate directional movement
+    price_changes = recent_prices.diff().dropna()
 
-    up_strength = up_moves.rolling(window=window).sum()
-    down_strength = down_moves.rolling(window=window).sum()
+    up_moves = price_changes[price_changes > 0].sum()
+    down_moves = abs(price_changes[price_changes < 0].sum())
 
-    latest_up = up_strength.iloc[-1]
-    latest_down = down_strength.iloc[-1]
+    total_moves = up_moves + down_moves
 
-    if pd.isna(latest_up) or pd.isna(latest_down):
-        return {
-            "signal": "Neutral",
-            "score": 0,
-            "driver": "Trend strength insufficient data"
-        }
+    if total_moves == 0:
+        return {"signal": "Neutral", "confidence": 0.0}
 
-    total_strength = float(latest_up + latest_down)
+    strength_ratio = up_moves / total_moves
 
-    if total_strength == 0:
-        return {
-            "signal": "Neutral",
-            "score": 0,
-            "driver": "No directional movement"
-        }
-
-    dominance = (latest_up - latest_down) / total_strength
-
-    if dominance > 0.3:
-        return {
-            "signal": "Bullish",
-            "score": 10,
-            "driver": "Strong upward trend"
-        }
-
-    if dominance < -0.3:
-        return {
-            "signal": "Bearish",
-            "score": -10,
-            "driver": "Strong downward trend"
-        }
-
-    return {
-        "signal": "Neutral",
-        "score": 0,
-        "driver": "Weak or mixed trend"
-    }
+    if strength_ratio > 0.6:
+        return {"signal": "Bullish", "confidence": round(strength_ratio, 2)}
+    elif strength_ratio < 0.4:
+        return {"signal": "Bearish", "confidence": round(1 - strength_ratio, 2)}
+    else:
+        return {"signal": "Neutral", "confidence": 0.5}
