@@ -31,7 +31,7 @@ st.title("DefiTuna LP Dashboard")
 st.caption("Multi-Range Liquidity Intelligence System")
 
 # =================================================
-# DATA FETCH (PRICE STORE ONLY)
+# FETCH PRICE DATA (FROM STORE ONLY)
 # =================================================
 with st.spinner("Fetching SOL price data..."):
     current_price = get_current_price()
@@ -42,18 +42,18 @@ if current_price is None or price_history is None:
     st.stop()
 
 # =================================================
-# CORE STRATEGY ENGINE
+# CORE ENGINE
 # =================================================
 fusion_output = fuse_signals(price_history)
 
 # =================================================
-# SECTION — PRICE
+# SECTION 1 — PRICE
 # =================================================
 st.markdown("## 🔵 Solana (SOL) Price")
 st.metric("Current Price", f"${current_price:,.2f}")
 
 # =================================================
-# SECTION — MARKET STATE
+# SECTION 2 — MARKET STATE
 # =================================================
 st.markdown("## 📈 Market State")
 st.write(f"**Direction:** {fusion_output['final_direction']}")
@@ -61,7 +61,7 @@ st.write(f"**Regime:** {fusion_output['risk_mode']}")
 st.write(f"**Confidence:** {fusion_output['final_confidence']}")
 
 # =================================================
-# SECTION — ACTIVE STRATEGY
+# SECTION 3 — ACTIVE STRATEGY
 # =================================================
 st.markdown("## ⭐ Active LP Strategy")
 
@@ -70,22 +70,19 @@ col1, col2, col3, col4 = st.columns(4)
 col1.metric("Active Mode", fusion_output["active_mode"])
 col2.metric("Range Low", f"${fusion_output['active_range']['range_low']}")
 col3.metric("Range High", f"${fusion_output['active_range']['range_high']}")
-col4.metric("Range Width (%)", fusion_output["active_range"]["width_pct"])
+col4.metric("Width (%)", fusion_output["active_range"]["width_pct"])
 
 st.write(
-    f"**Capital Allocation:** {int(fusion_output['active_allocation'] * 100)}%  |  "
+    f"**Capital Allocation:** {int(fusion_output['active_allocation'] * 100)}%  \n"
     f"**Liquidity Floor:** {int(fusion_output['active_range']['liquidity_floor'] * 100)}%"
 )
 
-st.info(
-    f"Why {fusion_output['active_mode']} mode? "
-    "Selected automatically based on confidence, volatility, and detected market regime."
-)
+st.info(fusion_output["active_reason"])
 
 st.divider()
 
 # =================================================
-# SECTION — MULTI RANGE COMPARISON
+# SECTION 4 — MULTI-RANGE VIEW
 # =================================================
 st.markdown("## 🧩 Liquidity Ranges (All Modes)")
 
@@ -96,7 +93,7 @@ active_mode = fusion_output["active_mode"]
 for mode in ["Defensive", "Balanced", "Aggressive"]:
     is_active = mode == active_mode
 
-    st.subheader(f"{mode} Mode {'⭐ ACTIVE' if is_active else ''}")
+    st.subheader(f"{mode} {'⭐ ACTIVE' if is_active else ''}")
 
     col1, col2, col3 = st.columns(3)
     col1.metric("Range Low", f"${ranges[mode]['range_low']}")
@@ -104,8 +101,8 @@ for mode in ["Defensive", "Balanced", "Aggressive"]:
     col3.metric("Width (%)", ranges[mode]["width_pct"])
 
     st.write(
-        f"Liquidity Allocation: {int(allocation[mode] * 100)}%  |  "
-        f"Liquidity Floor: {int(ranges[mode]['liquidity_floor'] * 100)}%"
+        f"Liquidity Allocation: {int(allocation[mode] * 100)}%  "
+        f"(Floor: {int(ranges[mode]['liquidity_floor'] * 100)}%)"
     )
 
     if is_active:
@@ -114,17 +111,17 @@ for mode in ["Defensive", "Balanced", "Aggressive"]:
     st.divider()
 
 # =================================================
-# SECTION — TECHNICAL SUMMARY
+# SECTION 5 — TECHNICAL SUMMARY
 # =================================================
 st.markdown("## 📊 Technical Analysis Summary")
 
 col1, col2, col3 = st.columns(3)
 col1.metric("TA Score", fusion_output["ta_score"])
-col2.metric("Volatility Proxy", fusion_output["volatility_label"])
-col3.metric("Trend Strength", fusion_output["trend_strength_label"])
+col2.metric("Volatility Regime", fusion_output["volatility_regime"])
+col3.metric("Trend Strength", fusion_output["trend_strength"])
 
 # =================================================
-# SECTION — TECHNICAL DRIVERS
+# SECTION 6 — TECHNICAL DRIVERS
 # =================================================
 st.markdown("## 🧮 Technical Drivers")
 for driver in fusion_output["ta_drivers"]:
@@ -134,6 +131,6 @@ for driver in fusion_output["ta_drivers"]:
 # FOOTNOTE
 # =================================================
 st.caption(
-    "ℹ️ Strategy and ranges are computed automatically. "
-    "Manual overrides and scenario simulations will be added in later steps."
+    "ℹ️ LP mode and ranges are selected automatically based on "
+    "technical signals, volatility, confidence, and detected market regime."
 )
