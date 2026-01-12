@@ -1,83 +1,79 @@
-from typing import Dict
+# core/strategy/multi_range_engine.py
 
-
-# -----------------------------
-# CONFIG
-# -----------------------------
-MIN_WIDTH = 8.0          # %
-VOL_MULTIPLIER = 2.5
-
-
-# -----------------------------
-# ENGINE
-# -----------------------------
 def generate_multi_ranges(
-    current_price: float,
-    volatility_pct: float,
-    confidence: float,
-    direction: str
-) -> Dict:
+    current_price,
+    volatility_pct,
+    direction,
+    capital=10000,
+    leverage=2
+):
     """
-    Generate defensive, balanced, and aggressive LP ranges.
-    All inputs MUST be scalars.
+    Generates Defensive / Balanced / Aggressive LP ranges.
+    ALL inputs are sanitized to floats here (MASTER RULE).
     """
 
-    # --- HARD SAFETY CASTS ---
+    # -----------------------------
+    # SAFETY CASTING (CRITICAL FIX)
+    # -----------------------------
     try:
         current_price = float(current_price)
-        volatility_pct = float(volatility_pct)
-        confidence = float(confidence)
     except Exception:
-        volatility_pct = MIN_WIDTH
+        current_price = 0.0
 
-    # --- BASE WIDTH LOGIC ---
-    base_width = max(
-        MIN_WIDTH,
-        volatility_pct * VOL_MULTIPLIER
-    )
+    try:
+        volatility_pct = float(volatility_pct)
+    except Exception:
+        volatility_pct = 0.0
 
-    # --- MODE DEFINITIONS ---
-    modes = {
-        "Defensive": {
-            "width_multiplier": 1.6,
-            "liquidity_floor": 0.5
-        },
-        "Balanced": {
-            "width_multiplier": 1.0,
-            "liquidity_floor": 0.3
-        },
-        "Aggressive": {
-            "width_multiplier": 0.6,
-            "liquidity_floor": 0.2
-        }
+    # -----------------------------
+    # CONFIG
+    # -----------------------------
+    MIN_WIDTH = 3.0        # %
+    VOL_MULTIPLIER = 1.5   # volatility sensitivity
+
+    base_width = max(MIN_WIDTH, volatility_pct * VOL_MULTIPLIER)
+
+    width_map = {
+        "Defensive": base_width * 1.5,
+        "Balanced": base_width,
+        "Aggressive": base_width * 0.6
+    }
+
+    liquidity_floor = {
+        "Defensive": 0.50,
+        "Balanced": 0.30,
+        "Aggressive": 0.15
+    }
+
+    allocation = {
+        "Defensive": 0.30,
+        "Balanced": 0.40,
+        "Aggressive": 0.30
     }
 
     ranges = {}
-    allocation = {}
 
-    for mode, params in modes.items():
-        width_pct = base_width * params["width_multiplier"]
-        half_range = (width_pct / 100) * current_price / 2
+    for mode, width_pct in width_map.items():
+        half_width = (width_pct / 100) * current_price
+
+        if direction == "Bullish":
+            low = current_price - half_width
+            high = current_price + (half_width * 1.2)
+        elif direction == "Bearish":
+            low = current_price - (half_width * 1.2)
+            high = current_price + half_width
+        else:
+            low = current_price - half_width
+            high = current_price + half_width
 
         ranges[mode] = {
-            "range_low": round(current_price - half_range, 2),
-            "range_high": round(current_price + half_range, 2),
+            "range_low": round(max(low, 0), 2),
+            "range_high": round(high, 2),
             "width_pct": round(width_pct, 2),
-            "liquidity_floor": params["liquidity_floor"]
+            "liquidity_floor": liquidity_floor[mode]
         }
-
-        allocation[mode] = params["liquidity_floor"]
-
-    # --- ACTIVE MODE SELECTION ---
-    if confidence >= 0.7:
-        active_mode = "Aggressive"
-    elif confidence >= 0.4:
-        active_mode = "Balanced"
-    else:
-        active_mode = "Defensive"
 
     return {
         "ranges": ranges,
-        "allocation": allocation,
-        "active_mode": active_mode
+        "allocation": allocation
     }
