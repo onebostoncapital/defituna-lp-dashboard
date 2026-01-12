@@ -1,57 +1,95 @@
-# data/store/price_store.py
-
 import pandas as pd
+import time
 
-from data.router.price_router import (
-    get_sol_price,
-    get_sol_price_history
+from data.sources.coingecko import (
+    get_sol_price_coingecko,
+    get_sol_price_history_coingecko
 )
 
-# -------------------------------------------------
-# SINGLE SOURCE OF TRUTH FOR PRICE DATA
-# -------------------------------------------------
+from data.sources.yfinance_source import (
+    get_sol_price_yfinance,
+    get_sol_price_history_yfinance
+)
 
+# =================================================
+# SIMPLE IN-MEMORY CACHE (Streamlit-safe)
+# =================================================
+_CACHE = {
+    "price": None,
+    "history": None,
+    "timestamp": 0
+}
+
+CACHE_TTL = 60  # seconds
+
+
+# =================================================
+# CURRENT PRICE
+# =================================================
 def get_current_price():
-    """
-    Returns:
-        float | None
-    """
+    global _CACHE
+
+    now = time.time()
+
+    # Return cached value if fresh
+    if _CACHE["price"] is not None and now - _CACHE["timestamp"] < CACHE_TTL:
+        return _CACHE["price"]
+
+    # 1️⃣ Try yfinance first
     try:
-        price = get_sol_price()
-        if price is None:
-            return None
-        return float(price)
+        price = get_sol_price_yfinance()
+        if price is not None:
+            _CACHE["price"] = float(price)
+            _CACHE["timestamp"] = now
+            return _CACHE["price"]
     except Exception:
-        return None
+        pass
+
+    # 2️⃣ Fallback to CoinGecko (MOST RELIABLE ON STREAMLIT)
+    try:
+        price = get_sol_price_coingecko()
+        if price is not None:
+            _CACHE["price"] = float(price)
+            _CACHE["timestamp"] = now
+            return _CACHE["price"]
+    except Exception:
+        pass
+
+    # ❌ Total failure (very rare)
+    return None
 
 
+# =================================================
+# PRICE HISTORY
+# =================================================
 def get_price_history(days=200):
-    """
-    Returns:
-        pandas.DataFrame with a 'close' column
-        or None if unavailable
-    """
+    global _CACHE
+
+    now = time.time()
+
+    # Return cached history if fresh
+    if _CACHE["history"] is not None and now - _CACHE["timestamp"] < CACHE_TTL:
+        return _CACHE["history"]
+
+    # 1️⃣ Try yfinance
     try:
-        df = get_sol_price_history(days=days)
-
-        if df is None or df.empty:
-            return None
-
-        # Normalize column name (CRITICAL)
-        if "Close" in df.columns:
-            df = df.rename(columns={"Close": "close"})
-
-        if "close" not in df.columns:
-            return None
-
-        # Ensure numeric & clean
-        df["close"] = pd.to_numeric(df["close"], errors="coerce")
-        df = df.dropna(subset=["close"])
-
-        if df.empty:
-            return None
-
-        return df
-
+        df = get_sol_price_history_yfinance(days=days)
+        if isinstance(df, pd.DataFrame) and not df.empty:
+            _CACHE["history"] = df
+            _CACHE["timestamp"] = now
+            return df
     except Exception:
-        return None
+        pass
+
+    # 2️⃣ Fallback to CoinGecko
+    try:
+        df = get_sol_price_history_coingecko(days=days)
+        if isinstance(df, pd.DataFrame) and not df.empty:
+            _CACHE["history"] = df
+            _CACHE["timestamp"] = now
+            return df
+    except Exception:
+        pass
+
+    # ❌ Total failure
+    return None
