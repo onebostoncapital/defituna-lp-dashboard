@@ -12,9 +12,9 @@ sys.path.insert(0, PROJECT_ROOT)
 # =================================================
 import streamlit as st
 
-from data.router.price_router import (
-    get_sol_price,
-    get_sol_price_history
+from data.store.price_store import (
+    get_current_price,
+    get_price_history
 )
 
 from core.strategy.fusion_engine import fuse_signals
@@ -31,11 +31,11 @@ st.title("DefiTuna LP Dashboard")
 st.caption("Multi-Range Liquidity Intelligence System")
 
 # =================================================
-# DATA FETCH
+# DATA FETCH (CENTRALIZED PRICE STORE)
 # =================================================
 with st.spinner("Fetching SOL price data..."):
-    current_price = get_sol_price()
-    price_history = get_sol_price_history(days=200)
+    current_price = get_current_price()
+    price_history = get_price_history(days=200)
 
 if current_price is None or price_history is None:
     st.error("Price data unavailable.")
