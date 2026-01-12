@@ -1,82 +1,53 @@
-"""
-Fundamental Analysis Aggregator
-CACHED + RESILIENT MODE
+from core.fa.news.crypto_news import fetch_crypto_news
+from core.fa.news.macro_news import fetch_macro_news
+from core.fa.news.geopolitical_news import fetch_geopolitical_news
+from core.fa.calendar.economic_calendar import fetch_economic_events
 
-This module guarantees:
-- No crashes
-- No missing keys
-- Safe defaults when news APIs fail
-"""
 
 def aggregate_fa_signals():
     """
-    Always returns a complete FA dictionary.
-    Never throws KeyError.
+    Aggregates all Fundamental Analysis signals.
+    ALWAYS returns:
+    - fa_score (float)
+    - drivers (list of strings)
     """
 
-    # -----------------------------
-    # SAFE DEFAULTS
-    # -----------------------------
-    crypto_score = 0.0
-    macro_score = 0.0
-    geo_score = 0.0
-
-    crypto_drivers = []
-    macro_drivers = []
-    geo_drivers = []
+    score = 0.0
+    drivers = []
 
     # -----------------------------
     # CRYPTO NEWS
     # -----------------------------
-    try:
-        from core.fa.news.crypto_news import fetch_crypto_news
-        crypto = fetch_crypto_news() or {}
-        crypto_score = float(crypto.get("score", 0.0))
-        crypto_drivers = crypto.get("drivers", [])
-    except Exception:
-        pass
+    crypto = fetch_crypto_news()
+    if crypto:
+        score += crypto.get("score", 0.0)
+        drivers.extend(crypto.get("drivers", []))
 
     # -----------------------------
     # MACRO NEWS
     # -----------------------------
-    try:
-        from core.fa.news.macro_news import fetch_macro_news
-        macro = fetch_macro_news() or {}
-        macro_score = float(macro.get("score", 0.0))
-        macro_drivers = macro.get("drivers", [])
-    except Exception:
-        pass
+    macro = fetch_macro_news()
+    if macro:
+        score += macro.get("score", 0.0)
+        drivers.extend(macro.get("drivers", []))
 
     # -----------------------------
-    # GEOPOLITICAL NEWS
+    # GEOPOLITICAL RISK
     # -----------------------------
-    try:
-        from core.fa.news.geopolitical_news import fetch_geopolitical_news
-        geo = fetch_geopolitical_news() or {}
-        geo_score = float(geo.get("score", 0.0))
-        geo_drivers = geo.get("drivers", [])
-    except Exception:
-        pass
+    geo = fetch_geopolitical_news()
+    if geo:
+        score += geo.get("score", 0.0)
+        drivers.extend(geo.get("drivers", []))
 
     # -----------------------------
-    # FINAL FA SCORE
+    # ECONOMIC CALENDAR
     # -----------------------------
-    fa_score = round(
-        crypto_score + macro_score + geo_score,
-        2
-    )
+    calendar = fetch_economic_events()
+    if calendar:
+        score += calendar.get("score", 0.0)
+        drivers.extend(calendar.get("drivers", []))
 
-    # -----------------------------
-    # RETURN (LOCKED CONTRACT)
-    # -----------------------------
     return {
-        "fa_score": fa_score,
-        "crypto_score": crypto_score,
-        "macro_score": macro_score,
-        "geo_score": geo_score,
-        "fa_drivers": (
-            crypto_drivers +
-            macro_drivers +
-            geo_drivers
-        )
+        "fa_score": round(score, 2),
+        "drivers": drivers if drivers else ["No dominant fundamental events detected"]
     }
