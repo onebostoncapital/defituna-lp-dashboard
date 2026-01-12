@@ -1,50 +1,31 @@
+# =================================================
+# VOLATILITY INDICATOR
+# Returns SINGLE volatility percentage
+# =================================================
+
 import pandas as pd
 
 
-def calculate_volatility(price_series: pd.DataFrame, window: int = 20):
+def calculate_volatility(price_series: pd.Series, window: int = 14) -> float:
     """
-    Calculate volatility regime using latest volatility value only.
+    Calculates rolling volatility as a percentage.
+    Returns ONE float value (not a Series).
     """
 
-    if price_series is None or price_series.empty:
-        return {
-            "signal": "Neutral",
-            "score": 0,
-            "driver": "Volatility data unavailable"
-        }
+    if len(price_series) < window:
+        return 0.0
 
-    close = price_series["close"]
+    # Percentage returns
+    returns = price_series.pct_change()
 
-    returns = close.pct_change()
+    # Rolling standard deviation
+    volatility = returns.rolling(window).std()
 
-    volatility_series = returns.rolling(window=window).std() * 100
-    latest_volatility = volatility_series.iloc[-1]
+    # Take the MOST RECENT value
+    latest_volatility = volatility.iloc[-1]
 
     if pd.isna(latest_volatility):
-        return {
-            "signal": "Neutral",
-            "score": 0,
-            "driver": "Volatility insufficient data"
-        }
+        return 0.0
 
-    volatility = float(latest_volatility)
-
-    if volatility < 1.5:
-        return {
-            "signal": "Bullish",
-            "score": 10,
-            "driver": "Low volatility regime"
-        }
-
-    if volatility > 4.0:
-        return {
-            "signal": "Bearish",
-            "score": -10,
-            "driver": "High volatility regime"
-        }
-
-    return {
-        "signal": "Neutral",
-        "score": 0,
-        "driver": "Moderate volatility"
-    }
+    # Convert to percentage
+    return float(latest_volatility * 100)
