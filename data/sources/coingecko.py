@@ -1,46 +1,42 @@
 import requests
 import pandas as pd
 
+BASE_URL = "https://api.coingecko.com/api/v3"
 
-def get_sol_price_coingecko():
-    """
-    Fetch current SOL price from CoinGecko.
-    """
+def fetch_sol_price():
     try:
-        url = "https://api.coingecko.com/api/v3/simple/price"
+        url = f"{BASE_URL}/simple/price"
         params = {
             "ids": "solana",
             "vs_currencies": "usd"
         }
         response = requests.get(url, params=params, timeout=10)
+        response.raise_for_status()
         data = response.json()
         return float(data["solana"]["usd"])
-    except Exception:
+    except Exception as e:
+        print("CoinGecko price error:", e)
         return None
 
 
-def get_sol_price_history_coingecko(days: int = 200):
-    """
-    Fetch historical SOL prices from CoinGecko.
-    Returns DataFrame with 'close' column.
-    """
+def fetch_sol_price_history(days=200):
     try:
-        url = "https://api.coingecko.com/api/v3/coins/solana/market_chart"
+        url = f"{BASE_URL}/coins/solana/market_chart"
         params = {
             "vs_currency": "usd",
             "days": days
         }
         response = requests.get(url, params=params, timeout=10)
+        response.raise_for_status()
         data = response.json()
 
         prices = data.get("prices", [])
         if not prices:
             return None
 
-        df = pd.DataFrame(prices, columns=["timestamp", "close"])
-        df["timestamp"] = pd.to_datetime(df["timestamp"], unit="ms")
-        df.set_index("timestamp", inplace=True)
+        df = pd.DataFrame(prices, columns=["timestamp", "price"])
+        return df["price"]
 
-        return df
-    except Exception:
+    except Exception as e:
+        print("CoinGecko history error:", e)
         return None
