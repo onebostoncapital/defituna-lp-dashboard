@@ -1,134 +1,135 @@
-# =================================================
-# STREAMLIT CLOUD IMPORT FIX (MUST BE FIRST)
-# =================================================
-import os
-import sys
+# app/main.py
 
-PROJECT_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
-sys.path.insert(0, PROJECT_ROOT)
-
-# =================================================
-# STANDARD IMPORTS
-# =================================================
 import streamlit as st
+import pandas as pd
 
-# ✅ USE PRICE STORE (SINGLE SOURCE OF TRUTH)
+# ==============================
+# PRICE STORE (NEW CANONICAL)
+# ==============================
+
 from data.store.price_store import (
     get_current_price,
-    get_price_history
+    get_price_history,
 )
+
+# ==============================
+# CORE ENGINES
+# ==============================
 
 from core.strategy.fusion_engine import fuse_signals
 
-# =================================================
-# STREAMLIT SETUP
-# =================================================
+# ==============================
+# PAGE CONFIG
+# ==============================
+
 st.set_page_config(
-    page_title="DefiTuna LP Dashboard",
-    layout="wide"
+    page_title="DeFiTuna LP Dashboard",
+    layout="wide",
 )
 
-st.title("DefiTuna LP Dashboard")
+st.title("DeFiTuna LP Dashboard")
 st.caption("Multi-Range Liquidity Intelligence System")
 
-# =================================================
-# DATA FETCH (FROM PRICE STORE)
-# =================================================
-with st.spinner("Fetching SOL price data..."):
-    current_price = get_current_price()
-    price_history = get_price_history(days=200)
+# ==============================
+# FETCH PRICE DATA (SAFE)
+# ==============================
 
-if current_price is None or price_history is None:
-    st.error("Price data unavailable")
+symbol = "SOL"
+
+current_price = get_current_price(symbol)
+price_history = get_price_history(symbol, days=7)
+
+# ==============================
+# HARD SAFETY CHECK
+# ==============================
+
+if current_price is None or price_history.empty:
+    st.error("Price data unavailable.")
     st.stop()
 
-# =================================================
-# CORE ENGINE
-# =================================================
-fusion_output = fuse_signals(price_history)
+# ==============================
+# DISPLAY PRICE
+# ==============================
 
-# =================================================
-# SECTION — PRICE
-# =================================================
-st.markdown("## 🔵 Solana (SOL) Price")
+st.subheader(f"{symbol} Price")
 st.metric("Current Price", f"${current_price:,.2f}")
 
-# =================================================
-# SECTION — MARKET STATE
-# =================================================
-st.markdown("## 📈 Market State")
-st.write(f"**Direction:** {fusion_output['final_direction']}")
-st.write(f"**Regime:** {fusion_output['risk_mode']}")
-st.write(f"**Confidence:** {fusion_output['final_confidence']}")
+# ==============================
+# RUN STRATEGY ENGINE
+# ==============================
 
-# =================================================
-# SECTION — ACTIVE STRATEGY
-# =================================================
-st.markdown("## ⭐ Active LP Strategy")
+fusion_output = fuse_signals(price_history)
 
-col1, col2, col3, col4 = st.columns(4)
+# ==============================
+# MARKET STATE
+# ==============================
 
-col1.metric("Mode", fusion_output["active_mode"])
-col2.metric("Range Low", f"${fusion_output['active_range']['range_low']}")
-col3.metric("Range High", f"${fusion_output['active_range']['range_high']}")
-col4.metric("Width (%)", fusion_output["active_range"]["width_pct"])
+st.subheader("Market State")
 
-st.write(
-    f"**Capital Allocation:** {int(fusion_output['active_allocation'] * 100)}%  |  "
-    f"**Liquidity Floor:** {int(fusion_output['active_range']['liquidity_floor'] * 100)}%"
-)
+col1, col2, col3 = st.columns(3)
 
-st.info(fusion_output["active_reason"])
+with col1:
+    st.write("Direction:", fusion_output.get("direction", "N/A"))
 
-st.divider()
+with col2:
+    st.write("Regime:", fusion_output.get("regime", "N/A"))
 
-# =================================================
-# SECTION — MULTI-RANGE VIEW
-# =================================================
-st.markdown("## 🧩 Liquidity Ranges (All Modes)")
+with col3:
+    st.write("Confidence:", fusion_output.get("confidence", 0.0))
 
-ranges = fusion_output["multi_ranges"]["ranges"]
-allocation = fusion_output["multi_ranges"]["allocation"]
-active_mode = fusion_output["active_mode"]
+# ==============================
+# ACTIVE STRATEGY
+# ==============================
 
-for mode in ["Defensive", "Balanced", "Aggressive"]:
-    is_active = mode == active_mode
+st.subheader("Active LP Strategy")
 
-    st.subheader(f"{mode} Mode {'⭐ (ACTIVE)' if is_active else ''}")
+st.write("Mode:", fusion_output.get("active_mode", "N/A"))
+st.write("Capital Allocation:", f"{fusion_output.get('capital_pct', 0)}%")
+st.write("Liquidity Floor:", f"{fusion_output.get('liquidity_floor_pct', 0)}%")
 
-    col1, col2, col3 = st.columns(3)
-    col1.metric("Range Low", f"${ranges[mode]['range_low']}")
-    col2.metric("Range High", f"${ranges[mode]['range_high']}")
-    col3.metric("Width (%)", ranges[mode]["width_pct"])
+if "active_reason" in fusion_output:
+    st.info(fusion_output["active_reason"])
 
-    st.write(
-        f"**Liquidity Allocation:** {int(allocation[mode] * 100)}%  "
-        f"(Floor: {int(ranges[mode]['liquidity_floor'] * 100)}%)"
-    )
+# ==============================
+# MULTI-RANGE COMPARISON
+# ==============================
 
-    if is_active:
-        st.success("This mode is currently ACTIVE")
+st.subheader("Liquidity Ranges (All Modes)")
 
-    st.divider()
+ranges = fusion_output.get("ranges", {})
 
-# =================================================
-# SECTION — TECHNICAL DRIVERS
-# =================================================
-st.markdown("## 🧮 Technical Drivers")
-for driver in fusion_output["ta_drivers"]:
-    st.write(f"• {driver}")
+for mode, data in ranges.items():
+    st.markdown(f"**{mode} Mode**")
+    cols = st.columns(3)
+    cols[0].metric("Range Low", f"${data['low']:,.2f}")
+    cols[1].metric("Range High", f"${data['high']:,.2f}")
+    cols[2].metric("Width (%)", f"{data['width_pct']}")
 
-# =================================================
-# SECTION — FUNDAMENTAL DRIVERS
-# =================================================
-st.markdown("## 📰 Fundamental Drivers")
-for driver in fusion_output["fa_drivers"]:
-    st.write(f"• {driver}")
+# ==============================
+# TECHNICAL SUMMARY
+# ==============================
 
-# =================================================
-# FOOTNOTE
-# =================================================
-st.caption(
-    "ℹ️ Strategy selection is fully automatic. "
-    "Manual overrides and backtesting will be added later."
-)
+st.subheader("Technical Analysis Summary")
+
+st.write("TA Score:", fusion_output.get("ta_score", 0))
+st.write("Volatility Regime:", fusion_output.get("volatility_regime", "N/A"))
+st.write("Trend Strength:", fusion_output.get("trend_strength", "N/A"))
+
+# ==============================
+# TECHNICAL DRIVERS
+# ==============================
+
+st.subheader("Technical Drivers")
+
+for driver in fusion_output.get("ta_drivers", []):
+    st.write("-", driver)
+
+# ==============================
+# FUNDAMENTAL DRIVERS (SAFE)
+# ==============================
+
+fa_drivers = fusion_output.get("fa_drivers", [])
+if fa_drivers:
+    st.subheader("Fundamental Drivers")
+    for driver in fa_drivers:
+        st.write("-", driver)
