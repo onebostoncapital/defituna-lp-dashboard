@@ -1,150 +1,89 @@
 # data/store/price_store.py
 
 import pandas as pd
-from datetime import datetime, timezone
+import requests
+from datetime import datetime, timedelta
 
-# ==============================
-# SAFE IMPORTS (NO CRASH)
-# ==============================
 
-def _safe_import_coingecko():
+# ======================================================
+# INTERNAL HELPERS
+# ======================================================
+
+def _fetch_coingecko(symbol: str, days: int):
     try:
-        from data.sources.coingecko import (
-            get_current_price as cg_current,
-            get_price_history as cg_history,
-        )
-        return cg_current, cg_history
+        url = "https://api.coingecko.com/api/v3/coins/solana/market_chart"
+        params = {"vs_currency": "usd", "days": days}
+        r = requests.get(url, params=params, timeout=10)
+        r.raise_for_status()
+
+        prices = r.json()["prices"]
+        df = pd.DataFrame(prices, columns=["timestamp", "close"])
+        df["timestamp"] = pd.to_datetime(df["timestamp"], unit="ms")
+        df.set_index("timestamp", inplace=True)
+        df["close"] = df["close"].astype(float)
+
+        return df
+
     except Exception:
-        return None, None
+        return None
 
 
-def _safe_import_yfinance():
+def _fetch_yfinance(symbol: str, days: int):
     try:
-        from data.sources.yfinance_source import (
-            get_current_price as yf_current,
-            get_price_history as yf_history,
-        )
-        return yf_current, yf_history
+        import yfinance as yf
+
+        ticker = yf.Ticker(f"{symbol}-USD")
+        hist = ticker.history(period=f"{days}d")
+
+        if hist.empty:
+            return None
+
+        df = hist[["Close"]].copy()
+        df.columns = ["close"]
+        df.index = pd.to_datetime(df.index)
+
+        return df
+
     except Exception:
-        return None, None
+        return None
 
 
-CG_CURRENT, CG_HISTORY = _safe_import_coingecko()
-YF_CURRENT, YF_HISTORY = _safe_import_yfinance()
-
-# ==============================
-# CANONICAL OUTPUT CONTRACT
-# ==============================
-
-def _empty_price_df() -> pd.DataFrame:
-    return pd.DataFrame(
-        columns=["timestamp", "close"]
-    )
-
-
-def _normalize_series_to_df(series) -> pd.DataFrame:
-    """
-    Converts list / Series / DataFrame to canonical DataFrame:
-    columns = ['timestamp', 'close']
-    """
-    try:
-        if isinstance(series, pd.DataFrame):
-            if "close" in series.columns:
-                df = series.copy()
-                if "timestamp" not in df.columns:
-                    df["timestamp"] = pd.date_range(
-                        end=datetime.now(timezone.utc),
-                        periods=len(df),
-                        freq="H",
-                    )
-                return df[["timestamp", "close"]]
-
-        if isinstance(series, pd.Series):
-            return pd.DataFrame(
-                {
-                    "timestamp": pd.date_range(
-                        end=datetime.now(timezone.utc),
-                        periods=len(series),
-                        freq="H",
-                    ),
-                    "close": series.values,
-                }
-            )
-
-        if isinstance(series, list):
-            return pd.DataFrame(
-                {
-                    "timestamp": pd.date_range(
-                        end=datetime.now(timezone.utc),
-                        periods=len(series),
-                        freq="H",
-                    ),
-                    "close": series,
-                }
-            )
-    except Exception:
-        pass
-
-    return _empty_price_df()
-
-
-# ==============================
+# ======================================================
 # PUBLIC API (USED BY APP)
-# ==============================
+# ======================================================
 
-def get_current_price(symbol: str = "SOL") -> float | None:
+def get_price_history(symbol: str, days: int = 7) -> pd.DataFrame:
     """
-    Returns float price or None (never raises)
-    """
-    # Try CoinGecko
-    if CG_CURRENT:
-        try:
-            price = CG_CURRENT(symbol)
-            if isinstance(price, (int, float)):
-                return float(price)
-        except Exception:
-            pass
-
-    # Fallback Yahoo Finance
-    if YF_CURRENT:
-        try:
-            price = YF_CURRENT(symbol)
-            if isinstance(price, (int, float)):
-                return float(price)
-        except Exception:
-            pass
-
-    return None
-
-
-def get_price_history(
-    symbol: str = "SOL",
-    days: int = 7,
-) -> pd.DataFrame:
-    """
-    ALWAYS returns DataFrame with:
-    ['timestamp', 'close']
+    Returns DataFrame with:
+    - index: datetime
+    - column: close (float)
     """
 
-    # --- Try CoinGecko ---
-    if CG_HISTORY:
-        try:
-            raw = CG_HISTORY(symbol, days=days)
-            df = _normalize_series_to_df(raw)
-            if not df.empty:
-                return df
-        except Exception:
-            pass
+    # 1️⃣ Try CoinGecko first
+    df = _fetch_coingecko(symbol, days)
+    if df is not None and not df.empty:
+        return df
 
-    # --- Fallback Yahoo Finance ---
-    if YF_HISTORY:
-        try:
-            raw = YF_HISTORY(symbol, days=days)
-            df = _normalize_series_to_df(raw)
-            if not df.empty:
-                return df
-        except Exception:
-            pass
+    # 2️⃣ Fallback to Yahoo Finance
+    df = _fetch_yfinance(symbol, days)
+    if df is not None and not df.empty:
+        return df
 
-    # --- Last resort ---
-    return _empty_price_df()
+    # 3️⃣ HARD FAIL (controlled)
+    return pd.DataFrame(columns=["close"])
+
+
+def get_current_price(symbol: str) -> float | None:
+    """
+    Returns latest price as float or None
+    """
+
+    df = get_price_history(symbol, days=1)
+
+    if df.empty:
+        return None
+
+    try:
+        return float(df["close"].iloc[-1])
+    except Exception:
+        return None
