@@ -18,6 +18,7 @@ from data.store.price_store import (
 )
 
 from core.strategy.fusion_engine import fuse_signals
+from core.fa.news.crypto_news import fetch_crypto_news
 
 # =================================================
 # STREAMLIT SETUP
@@ -31,7 +32,7 @@ st.title("DefiTuna LP Dashboard")
 st.caption("Multi-Range Liquidity Intelligence System")
 
 # =================================================
-# FETCH PRICE DATA (FROM STORE ONLY)
+# FETCH PRICE DATA
 # =================================================
 with st.spinner("Fetching SOL price data..."):
     current_price = get_current_price()
@@ -128,9 +129,25 @@ for driver in fusion_output["ta_drivers"]:
     st.write(f"• {driver}")
 
 # =================================================
+# SECTION 7 — LIVE CRYPTO NEWS
+# =================================================
+st.markdown("## 📰 Live Crypto News (Auto-refresh ~15 min)")
+
+news = fetch_crypto_news()
+
+if news and news.get("items"):
+    for item in news["items"][:3]:
+        st.markdown(
+            f"- [{item['title']}]({item['link']})",
+            unsafe_allow_html=True
+        )
+else:
+    st.write("No major crypto news detected at the moment.")
+
+# =================================================
 # FOOTNOTE
 # =================================================
 st.caption(
-    "ℹ️ LP mode and ranges are selected automatically based on "
-    "technical signals, volatility, confidence, and detected market regime."
+    "ℹ️ News updates automatically. Strategy decisions are derived "
+    "from technical, fundamental, and regime intelligence."
 )
