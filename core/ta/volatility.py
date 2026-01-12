@@ -1,5 +1,6 @@
 # =================================================
-# VOLATILITY INDICATOR (SAFE VERSION)
+# VOLATILITY INDICATOR (ULTRA SAFE)
+# Accepts Series OR DataFrame
 # Always returns ONE float
 # =================================================
 
@@ -7,21 +8,45 @@ import pandas as pd
 import numpy as np
 
 
-def calculate_volatility(price_series: pd.Series, window: int = 14) -> float:
+def calculate_volatility(price_input, window: int = 14) -> float:
     """
-    Returns volatility as a single percentage float.
-    No Pandas objects escape this function.
+    Calculates volatility percentage.
+    Accepts:
+    - pd.Series
+    - pd.DataFrame with 'close' or 'price' column
+    Returns:
+    - float
     """
 
-    if price_series is None or len(price_series) < window:
+    if price_input is None:
         return 0.0
 
-    # Ensure numeric
+    # ---------------------------------------------
+    # STEP 1: Extract Series safely
+    # ---------------------------------------------
+    if isinstance(price_input, pd.DataFrame):
+        if "close" in price_input.columns:
+            price_series = price_input["close"]
+        elif "price" in price_input.columns:
+            price_series = price_input["price"]
+        else:
+            return 0.0
+    elif isinstance(price_input, pd.Series):
+        price_series = price_input
+    else:
+        return 0.0
+
+    # ---------------------------------------------
+    # STEP 2: Clean data
+    # ---------------------------------------------
     price_series = pd.to_numeric(price_series, errors="coerce").dropna()
 
     if len(price_series) < window:
         return 0.0
 
+    # ---------------------------------------------
+    # STEP 3: Compute volatility
+    # ---------------------------------------------
     returns = price_series.pct_change().dropna()
 
     if len(returns) < window:
@@ -29,7 +54,6 @@ def calculate_volatility(price_series: pd.Series, window: int = 14) -> float:
 
     volatility_series = returns.rolling(window).std()
 
-    # FORCE scalar extraction
     latest = volatility_series.iloc[-1]
 
     try:
