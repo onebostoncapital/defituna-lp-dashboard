@@ -1,11 +1,9 @@
-"""
-TA Aggregator
+# =================================================
+# TA AGGREGATOR
+# Collects all technical indicators
+# =================================================
 
-IMPORTANT ARCHITECTURE RULE:
-- This module MUST NEVER fetch price data
-- It ONLY accepts price_series as input
-- Price fetching is handled by data.store.price_store
-"""
+import pandas as pd
 
 from core.ta.ma_20 import calculate_ma20
 from core.ta.ma_200 import calculate_ma200
@@ -15,44 +13,57 @@ from core.ta.volatility import calculate_volatility
 from core.ta.trend_strength import calculate_trend_strength
 
 
-def aggregate_ta_signals(price_series):
+def aggregate_ta_signals(price_series: pd.Series):
     """
-    Aggregate all TA indicators into a single TA score.
-    price_series MUST be a pandas Series of prices.
+    Returns:
+    - ta_score
+    - volatility_pct
+    - ta_drivers (human-readable)
     """
 
-    if price_series is None or len(price_series) < 50:
-        return {
-            "ta_score": 0.0,
-            "drivers": []
-        }
-
-    indicators = {
-        "MA20": calculate_ma20(price_series),
-        "MA200": calculate_ma200(price_series),
-        "Crossover": calculate_ma_crossover(price_series),
-        "RSI": calculate_rsi(price_series),
-        "Volatility": calculate_volatility(price_series),
-        "Trend Strength": calculate_trend_strength(price_series),
-    }
-
-    total_score = 0.0
+    results = {}
     drivers = []
+    score = 0.0
 
-    for name, result in indicators.items():
-        if not isinstance(result, dict):
-            continue
+    # -----------------------------
+    # Indicators
+    # -----------------------------
+    ma20 = calculate_ma20(price_series)
+    ma200 = calculate_ma200(price_series)
+    crossover = calculate_ma_crossover(price_series)
+    rsi = calculate_rsi(price_series)
+    volatility_pct = calculate_volatility(price_series)
+    trend = calculate_trend_strength(price_series)
 
-        score = float(result.get("score", 0.0))
-        confidence = float(result.get("confidence", 0.0))
-        signal = result.get("signal", "Neutral")
+    results["ma20"] = ma20
+    results["ma200"] = ma200
+    results["crossover"] = crossover
+    results["rsi"] = rsi
+    results["trend"] = trend
 
-        total_score += score * confidence
+    # -----------------------------
+    # Drivers (text)
+    # -----------------------------
+    drivers.append(f"MA20: {ma20['signal'].capitalize()}")
+    drivers.append(f"MA200: {ma200['signal'].capitalize()}")
+    drivers.append(f"Crossover: {crossover['signal'].capitalize()}")
+    drivers.append(f"RSI: {rsi['signal'].capitalize()}")
+    drivers.append(f"Trend Strength: {trend['signal'].capitalize()}")
 
-        if signal != "Neutral":
-            drivers.append(f"{name}: {signal}")
+    # -----------------------------
+    # Scoring
+    # -----------------------------
+    score += ma20["score"]
+    score += ma200["score"]
+    score += crossover["score"]
+    score += rsi["score"]
+    score += trend["score"]
+
+    # Normalize TA score
+    ta_score = score / 5.0
 
     return {
-        "ta_score": round(total_score, 3),
-        "drivers": drivers
+        "ta_score": round(ta_score, 2),
+        "volatility_pct": round(volatility_pct, 2),
+        "ta_drivers": drivers
     }
