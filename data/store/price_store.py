@@ -1,18 +1,13 @@
-import pandas as pd
 import time
+import pandas as pd
 
-from data.sources.coingecko import (
-    get_sol_price_coingecko,
-    get_sol_price_history_coingecko
-)
+# Import modules (NOT function names)
+import data.sources.coingecko as coingecko
+import data.sources.yfinance_source as yfinance
 
-from data.sources.yfinance_source import (
-    get_sol_price_yfinance,
-    get_sol_price_history_yfinance
-)
 
 # =================================================
-# SIMPLE IN-MEMORY CACHE (Streamlit-safe)
+# SIMPLE CACHE
 # =================================================
 _CACHE = {
     "price": None,
@@ -24,72 +19,70 @@ CACHE_TTL = 60  # seconds
 
 
 # =================================================
-# CURRENT PRICE
+# CURRENT PRICE (SAFE)
 # =================================================
 def get_current_price():
     global _CACHE
-
     now = time.time()
 
-    # Return cached value if fresh
     if _CACHE["price"] is not None and now - _CACHE["timestamp"] < CACHE_TTL:
         return _CACHE["price"]
 
-    # 1️⃣ Try yfinance first
+    # 1️⃣ Try yfinance
     try:
-        price = get_sol_price_yfinance()
-        if price is not None:
-            _CACHE["price"] = float(price)
-            _CACHE["timestamp"] = now
-            return _CACHE["price"]
+        if hasattr(yfinance, "get_sol_price"):
+            price = yfinance.get_sol_price()
+            if price is not None:
+                _CACHE["price"] = float(price)
+                _CACHE["timestamp"] = now
+                return _CACHE["price"]
     except Exception:
         pass
 
-    # 2️⃣ Fallback to CoinGecko (MOST RELIABLE ON STREAMLIT)
+    # 2️⃣ Try CoinGecko
     try:
-        price = get_sol_price_coingecko()
-        if price is not None:
-            _CACHE["price"] = float(price)
-            _CACHE["timestamp"] = now
-            return _CACHE["price"]
+        if hasattr(coingecko, "get_sol_price"):
+            price = coingecko.get_sol_price()
+            if price is not None:
+                _CACHE["price"] = float(price)
+                _CACHE["timestamp"] = now
+                return _CACHE["price"]
     except Exception:
         pass
 
-    # ❌ Total failure (very rare)
     return None
 
 
 # =================================================
-# PRICE HISTORY
+# PRICE HISTORY (SAFE)
 # =================================================
 def get_price_history(days=200):
     global _CACHE
-
     now = time.time()
 
-    # Return cached history if fresh
     if _CACHE["history"] is not None and now - _CACHE["timestamp"] < CACHE_TTL:
         return _CACHE["history"]
 
     # 1️⃣ Try yfinance
     try:
-        df = get_sol_price_history_yfinance(days=days)
-        if isinstance(df, pd.DataFrame) and not df.empty:
-            _CACHE["history"] = df
-            _CACHE["timestamp"] = now
-            return df
+        if hasattr(yfinance, "get_sol_price_history"):
+            df = yfinance.get_sol_price_history(days=days)
+            if isinstance(df, pd.DataFrame) and not df.empty:
+                _CACHE["history"] = df
+                _CACHE["timestamp"] = now
+                return df
     except Exception:
         pass
 
-    # 2️⃣ Fallback to CoinGecko
+    # 2️⃣ Try CoinGecko
     try:
-        df = get_sol_price_history_coingecko(days=days)
-        if isinstance(df, pd.DataFrame) and not df.empty:
-            _CACHE["history"] = df
-            _CACHE["timestamp"] = now
-            return df
+        if hasattr(coingecko, "get_sol_price_history"):
+            df = coingecko.get_sol_price_history(days=days)
+            if isinstance(df, pd.DataFrame) and not df.empty:
+                _CACHE["history"] = df
+                _CACHE["timestamp"] = now
+                return df
     except Exception:
         pass
 
-    # ❌ Total failure
     return None
