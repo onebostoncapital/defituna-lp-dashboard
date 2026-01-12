@@ -1,58 +1,32 @@
 import pandas as pd
+import numpy as np
 
 
-def calculate_rsi(price_series: pd.DataFrame, period: int = 14):
+def calculate_rsi(price_series, period=14):
     """
-    Calculate RSI signal using the latest RSI value only.
+    RSI calculated from a Pandas Series (MASTER RULE).
     """
 
-    if price_series is None or price_series.empty:
-        return {
-            "signal": "Neutral",
-            "score": 0,
-            "driver": "RSI data unavailable"
-        }
+    price_series = pd.to_numeric(price_series, errors="coerce").dropna()
 
-    close = price_series["close"]
+    if len(price_series) < period + 1:
+        return {"signal": "Neutral", "confidence": 0.0}
 
-    delta = close.diff()
+    delta = price_series.diff()
+    gain = delta.clip(lower=0)
+    loss = -delta.clip(upper=0)
 
-    gain = delta.where(delta > 0, 0.0)
-    loss = -delta.where(delta < 0, 0.0)
-
-    avg_gain = gain.rolling(window=period).mean()
-    avg_loss = loss.rolling(window=period).mean()
+    avg_gain = gain.rolling(period).mean()
+    avg_loss = loss.rolling(period).mean()
 
     rs = avg_gain / avg_loss
     rsi = 100 - (100 / (1 + rs))
 
-    latest_rsi = rsi.iloc[-1]
-
-    if pd.isna(latest_rsi):
-        return {
-            "signal": "Neutral",
-            "score": 0,
-            "driver": "RSI insufficient data"
-        }
-
-    current_rsi = float(latest_rsi)
+    current_rsi = float(rsi.iloc[-1])
 
     if current_rsi < 30:
-        return {
-            "signal": "Bullish",
-            "score": 15,
-            "driver": "RSI oversold"
-        }
-
-    if current_rsi > 70:
-        return {
-            "signal": "Bearish",
-            "score": -15,
-            "driver": "RSI overbought"
-        }
-
-    return {
-        "signal": "Neutral",
-        "score": 0,
-        "driver": "RSI neutral"
-    }
+        return {"signal": "Bullish", "confidence": 1.0}
+    elif current_rsi > 70:
+        return {"signal": "Bearish", "confidence": 1.0}
+    else:
+        return {"signal": "Neutral", "confidence": 0.5}
