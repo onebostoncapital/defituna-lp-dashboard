@@ -8,13 +8,13 @@ PROJECT_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
 sys.path.insert(0, PROJECT_ROOT)
 
 # =================================================
-# STANDARD IMPORTS
+# IMPORTS
 # =================================================
 import streamlit as st
 
-from data.router.price_router import (
-    get_sol_price,
-    get_sol_price_history
+from data.store.price_store import (
+    get_current_price,
+    get_price_history
 )
 
 from core.strategy.fusion_engine import fuse_signals
@@ -34,8 +34,8 @@ st.caption("Multi-Range Liquidity Intelligence System")
 # DATA FETCH
 # =================================================
 with st.spinner("Fetching SOL price data..."):
-    current_price = get_sol_price()
-    price_history = get_sol_price_history(days=200)
+    current_price = get_current_price()
+    price_history = get_price_history(days=200)
 
 if current_price is None or price_history is None:
     st.error("Price data unavailable.")
@@ -47,107 +47,84 @@ if current_price is None or price_history is None:
 fusion_output = fuse_signals(price_history)
 
 # =================================================
-# SECTION 1 — PRICE
+# PRICE
 # =================================================
 st.markdown("## 🔵 Solana (SOL) Price")
 st.metric("Current Price", f"${current_price:,.2f}")
 
 # =================================================
-# SECTION 2 — MARKET STATE
+# MARKET STATE
 # =================================================
 st.markdown("## 📈 Market State")
-st.write(f"**Direction:** {fusion_output['final_direction']}")
-st.write(f"**Regime:** {fusion_output['risk_mode']}")
-st.write(f"**Confidence:** {fusion_output['final_confidence']}")
+st.write(f"**Direction:** {fusion_output.get('final_direction', 'N/A')}")
+st.write(f"**Regime:** {fusion_output.get('risk_mode', 'N/A')}")
+st.write(f"**Confidence:** {fusion_output.get('final_confidence', 0.0)}")
 
 # =================================================
-# SECTION 3 — ACTIVE STRATEGY
+# ACTIVE STRATEGY
 # =================================================
 st.markdown("## ⭐ Active LP Strategy")
 
+active_mode = fusion_output.get("active_mode", "N/A")
+active_range = fusion_output.get("active_range", {})
+active_allocation = fusion_output.get("active_allocation", 0.0)
+
 col1, col2, col3 = st.columns(3)
 
-col1.metric("Active Mode", fusion_output["active_mode"])
-col2.metric(
-    "Range Low",
-    f"${fusion_output['active_range']['range_low']}"
-)
-col3.metric(
-    "Range High",
-    f"${fusion_output['active_range']['range_high']}"
-)
+col1.metric("Active Mode", active_mode)
+col2.metric("Range Low", f"${active_range.get('range_low', '—')}")
+col3.metric("Range High", f"${active_range.get('range_high', '—')}")
 
-st.write(
-    f"**Capital Allocation:** "
-    f"{int(fusion_output['active_allocation'] * 100)}%"
-)
+st.write(f"**Capital Allocation:** {int(active_allocation * 100)}%")
 
 st.divider()
 
 # =================================================
-# SECTION 4 — MULTI-RANGE VIEW
-# =================================================
-st.markdown("## 🧩 Liquidity Ranges (All Modes)")
-
-ranges = fusion_output["multi_ranges"]["ranges"]
-allocation = fusion_output["multi_ranges"]["allocation"]
-active_mode = fusion_output["active_mode"]
-
-for mode in ["Defensive", "Balanced", "Aggressive"]:
-    is_active = mode == active_mode
-
-    st.subheader(
-        f"{mode} Mode {'⭐ (ACTIVE)' if is_active else ''}"
-    )
-
-    col1, col2, col3 = st.columns(3)
-    col1.metric("Range Low", f"${ranges[mode]['range_low']}")
-    col2.metric("Range High", f"${ranges[mode]['range_high']}")
-    col3.metric("Width (%)", f"{ranges[mode]['width_pct']}")
-
-    st.write(
-        f"**Liquidity Allocation:** {int(allocation[mode] * 100)}% "
-        f"(Floor: {int(ranges[mode]['liquidity_floor'] * 100)}%)"
-    )
-
-    if is_active:
-        st.success("This mode is currently ACTIVE")
-
-    st.divider()
-
-# =================================================
-# SECTION 5 — TECHNICAL DRIVERS
+# TECHNICAL DRIVERS
 # =================================================
 st.markdown("## 🧮 Technical Drivers")
-for driver in fusion_output["ta_drivers"]:
-    st.write(f"• {driver}")
+
+ta_drivers = fusion_output.get("ta_drivers", [])
+
+if ta_drivers:
+    for driver in ta_drivers:
+        st.write(f"• {driver}")
+else:
+    st.info("No strong technical drivers detected.")
 
 # =================================================
-# SECTION 6 — FUNDAMENTAL DRIVERS
+# FUNDAMENTAL DRIVERS (SAFE)
 # =================================================
 st.markdown("## 🧠 Fundamental Drivers")
-st.write(f"**FA Score:** {fusion_output['fa_score']}")
 
-for driver in fusion_output["fa_drivers"]:
-    st.write(f"• {driver}")
+st.write(f"**FA Score:** {fusion_output.get('fa_score', 0.0)}")
 
-# =================================================
-# SECTION 7 — NEWS FEED (CLICKABLE)
-# =================================================
-st.markdown("## 📰 News Feed")
+fa_drivers = fusion_output.get("fa_drivers", [])
 
-if fusion_output["fa_news"]:
-    for item in fusion_output["fa_news"]:
-        st.markdown(
-            f"- [{item['title']}]({item['link']})"
-        )
+if fa_drivers:
+    for driver in fa_drivers:
+        st.write(f"• {driver}")
 else:
-    st.info("No major news detected.")
+    st.info("No fundamental drivers detected.")
+
+# =================================================
+# NEWS FEED (SAFE)
+# =================================================
+st.markdown("## 📰 News")
+
+fa_news = fusion_output.get("fa_news", [])
+
+if fa_news:
+    for item in fa_news:
+        title = item.get("title", "News")
+        link = item.get("link", "#")
+        st.markdown(f"- [{title}]({link})")
+else:
+    st.info("No major news items available.")
 
 # =================================================
 # FOOTNOTE
 # =================================================
 st.caption(
-    "ℹ️ Active LP mode is selected automatically based on "
-    "confidence, volatility, and market regime."
+    "ℹ️ LP mode is selected automatically based on confidence, volatility, and regime."
 )
