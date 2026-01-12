@@ -12,9 +12,9 @@ sys.path.insert(0, PROJECT_ROOT)
 # =================================================
 import streamlit as st
 
-from data.store.price_store import (
-    get_current_price,
-    get_price_history
+from data.router.price_router import (
+    get_sol_price,
+    get_sol_price_history
 )
 
 from core.strategy.fusion_engine import fuse_signals
@@ -31,11 +31,11 @@ st.title("DefiTuna LP Dashboard")
 st.caption("Multi-Range Liquidity Intelligence System")
 
 # =================================================
-# DATA FETCH (CENTRALIZED PRICE STORE)
+# DATA FETCH
 # =================================================
 with st.spinner("Fetching SOL price data..."):
-    current_price = get_current_price()
-    price_history = get_price_history(days=200)
+    current_price = get_sol_price()
+    price_history = get_sol_price_history(days=200)
 
 if current_price is None or price_history is None:
     st.error("Price data unavailable.")
@@ -69,11 +69,11 @@ col1, col2, col3 = st.columns(3)
 
 col1.metric("Active Mode", fusion_output["active_mode"])
 col2.metric(
-    "Active Range Low",
+    "Range Low",
     f"${fusion_output['active_range']['range_low']}"
 )
 col3.metric(
-    "Active Range High",
+    "Range High",
     f"${fusion_output['active_range']['range_high']}"
 )
 
@@ -123,9 +123,31 @@ for driver in fusion_output["ta_drivers"]:
     st.write(f"• {driver}")
 
 # =================================================
+# SECTION 6 — FUNDAMENTAL DRIVERS
+# =================================================
+st.markdown("## 🧠 Fundamental Drivers")
+st.write(f"**FA Score:** {fusion_output['fa_score']}")
+
+for driver in fusion_output["fa_drivers"]:
+    st.write(f"• {driver}")
+
+# =================================================
+# SECTION 7 — NEWS FEED (CLICKABLE)
+# =================================================
+st.markdown("## 📰 News Feed")
+
+if fusion_output["fa_news"]:
+    for item in fusion_output["fa_news"]:
+        st.markdown(
+            f"- [{item['title']}]({item['link']})"
+        )
+else:
+    st.info("No major news detected.")
+
+# =================================================
 # FOOTNOTE
 # =================================================
 st.caption(
     "ℹ️ Active LP mode is selected automatically based on "
-    "confidence, volatility, and regime."
+    "confidence, volatility, and market regime."
 )
