@@ -1,50 +1,30 @@
 import pandas as pd
 
-
-def calculate_ma20(price_series: pd.DataFrame):
+def calculate_ma20(price_series):
     """
-    Calculate MA20 signal using the latest price only.
+    price_series: pandas Series of prices
     """
-
-    if price_series is None or price_series.empty:
+    if price_series is None or len(price_series) < 20:
         return {
             "signal": "Neutral",
-            "score": 0,
-            "driver": "MA20 data unavailable"
+            "confidence": 0.0,
+            "value": None
         }
 
-    close = price_series["close"]
+    price_series = pd.to_numeric(price_series, errors="coerce").dropna()
 
-    ma20 = close.rolling(window=20).mean()
+    ma20 = price_series.rolling(window=20).mean().iloc[-1]
+    current_price = price_series.iloc[-1]
 
-    latest_price = close.iloc[-1]
-    latest_ma20 = ma20.iloc[-1]
-
-    if pd.isna(latest_ma20):
-        return {
-            "signal": "Neutral",
-            "score": 0,
-            "driver": "MA20 insufficient data"
-        }
-
-    distance_pct = ((latest_price - latest_ma20) / latest_ma20) * 100
-
-    if distance_pct > 0.5:
-        return {
-            "signal": "Bullish",
-            "score": 15,
-            "driver": "Price above MA20"
-        }
-
-    if distance_pct < -0.5:
-        return {
-            "signal": "Bearish",
-            "score": -15,
-            "driver": "Price below MA20"
-        }
+    if current_price > ma20:
+        signal = "Bullish"
+        confidence = 0.6
+    else:
+        signal = "Bearish"
+        confidence = 0.6
 
     return {
-        "signal": "Neutral",
-        "score": 0,
-        "driver": "Price near MA20"
+        "signal": signal,
+        "confidence": confidence,
+        "value": round(ma20, 2)
     }
