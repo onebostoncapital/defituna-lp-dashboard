@@ -1,18 +1,9 @@
 import pandas as pd
-import numpy as np
 
+def calculate_rsi(price_df, period=14):
+    close = price_df["close"]
 
-def calculate_rsi(price_series, period=14):
-    """
-    RSI calculated from a Pandas Series (MASTER RULE).
-    """
-
-    price_series = pd.to_numeric(price_series, errors="coerce").dropna()
-
-    if len(price_series) < period + 1:
-        return {"signal": "Neutral", "confidence": 0.0}
-
-    delta = price_series.diff()
+    delta = close.diff()
     gain = delta.clip(lower=0)
     loss = -delta.clip(upper=0)
 
@@ -22,11 +13,20 @@ def calculate_rsi(price_series, period=14):
     rs = avg_gain / avg_loss
     rsi = 100 - (100 / (1 + rs))
 
-    current_rsi = float(rsi.iloc[-1])
+    latest = rsi.iloc[-1]
 
-    if current_rsi < 30:
-        return {"signal": "Bullish", "confidence": 1.0}
-    elif current_rsi > 70:
-        return {"signal": "Bearish", "confidence": 1.0}
+    if latest < 30:
+        signal = "Bullish"
+        score = 1.0
+    elif latest > 70:
+        signal = "Bearish"
+        score = -1.0
     else:
-        return {"signal": "Neutral", "confidence": 0.5}
+        signal = "Neutral"
+        score = 0.0
+
+    return {
+        "value": round(float(latest), 2),
+        "signal": signal,
+        "score": score
+    }

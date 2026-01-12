@@ -1,18 +1,9 @@
-import pandas as pd
+def calculate_ma_crossover(price_df):
+    close = price_df["close"]
+    ma20 = close.rolling(20).mean()
+    ma200 = close.rolling(200).mean()
 
-def calculate_ma_crossover(price_series):
-    if price_series is None or len(price_series) < 200:
-        return {
-            "signal": "Neutral",
-            "confidence": 0.0
-        }
-
-    price_series = pd.to_numeric(price_series, errors="coerce").dropna()
-
-    ma20 = price_series.rolling(20).mean().iloc[-1]
-    ma200 = price_series.rolling(200).mean().iloc[-1]
-
-    if ma20 > ma200:
-        return {"signal": "Bullish", "confidence": 0.7}
+    if ma20.iloc[-1] > ma200.iloc[-1]:
+        return {"signal": "Bullish", "score": 1.0}
     else:
-        return {"signal": "Bearish", "confidence": 0.7}
+        return {"signal": "Bearish", "score": -1.0}
