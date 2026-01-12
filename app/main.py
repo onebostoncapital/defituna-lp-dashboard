@@ -91,7 +91,7 @@ st.info(
 st.divider()
 
 # =================================================
-# SECTION 4 — MULTI-RANGE COMPARISON (RESTORED)
+# SECTION 4 — MULTI-RANGE COMPARISON
 # =================================================
 st.markdown("## 🧩 Liquidity Ranges (All Modes)")
 
@@ -124,7 +124,28 @@ for mode in ["Defensive", "Balanced", "Aggressive"]:
     st.divider()
 
 # =================================================
-# SECTION 5 — TECHNICAL DRIVERS
+# SECTION 5 — TECHNICAL ANALYSIS SUMMARY (RESTORED)
+# =================================================
+st.markdown("## 📊 Technical Analysis Summary")
+
+ta_score = fusion_output.get("ta_score", 0.0)
+volatility_pct = fusion_output.get("multi_ranges", {}).get("volatility_pct", None)
+
+trend_strength = None
+for driver in fusion_output.get("ta_drivers", []):
+    if "Trend Strength" in driver:
+        trend_strength = driver
+
+col1, col2, col3 = st.columns(3)
+
+col1.metric("TA Score", round(ta_score, 2))
+col2.metric("Volatility Proxy", "Derived from TA")
+col3.metric("Trend Strength", trend_strength or "Mixed")
+
+st.divider()
+
+# =================================================
+# SECTION 6 — TECHNICAL DRIVERS (DETAIL)
 # =================================================
 st.markdown("## 🧮 Technical Drivers")
 
@@ -140,6 +161,6 @@ else:
 # FOOTNOTE
 # =================================================
 st.caption(
-    "ℹ️ Strategy mode is selected automatically. "
-    "Manual override will be added in a later step."
+    "ℹ️ TA score is an aggregated signal derived from "
+    "moving averages, momentum, volatility, and trend strength."
 )
