@@ -1,88 +1,150 @@
-import time
+# data/store/price_store.py
+
 import pandas as pd
+from datetime import datetime, timezone
 
-# Import modules (NOT function names)
-import data.sources.coingecko as coingecko
-import data.sources.yfinance_source as yfinance
+# ==============================
+# SAFE IMPORTS (NO CRASH)
+# ==============================
 
-
-# =================================================
-# SIMPLE CACHE
-# =================================================
-_CACHE = {
-    "price": None,
-    "history": None,
-    "timestamp": 0
-}
-
-CACHE_TTL = 60  # seconds
-
-
-# =================================================
-# CURRENT PRICE (SAFE)
-# =================================================
-def get_current_price():
-    global _CACHE
-    now = time.time()
-
-    if _CACHE["price"] is not None and now - _CACHE["timestamp"] < CACHE_TTL:
-        return _CACHE["price"]
-
-    # 1️⃣ Try yfinance
+def _safe_import_coingecko():
     try:
-        if hasattr(yfinance, "get_sol_price"):
-            price = yfinance.get_sol_price()
-            if price is not None:
-                _CACHE["price"] = float(price)
-                _CACHE["timestamp"] = now
-                return _CACHE["price"]
+        from data.sources.coingecko import (
+            get_current_price as cg_current,
+            get_price_history as cg_history,
+        )
+        return cg_current, cg_history
+    except Exception:
+        return None, None
+
+
+def _safe_import_yfinance():
+    try:
+        from data.sources.yfinance_source import (
+            get_current_price as yf_current,
+            get_price_history as yf_history,
+        )
+        return yf_current, yf_history
+    except Exception:
+        return None, None
+
+
+CG_CURRENT, CG_HISTORY = _safe_import_coingecko()
+YF_CURRENT, YF_HISTORY = _safe_import_yfinance()
+
+# ==============================
+# CANONICAL OUTPUT CONTRACT
+# ==============================
+
+def _empty_price_df() -> pd.DataFrame:
+    return pd.DataFrame(
+        columns=["timestamp", "close"]
+    )
+
+
+def _normalize_series_to_df(series) -> pd.DataFrame:
+    """
+    Converts list / Series / DataFrame to canonical DataFrame:
+    columns = ['timestamp', 'close']
+    """
+    try:
+        if isinstance(series, pd.DataFrame):
+            if "close" in series.columns:
+                df = series.copy()
+                if "timestamp" not in df.columns:
+                    df["timestamp"] = pd.date_range(
+                        end=datetime.now(timezone.utc),
+                        periods=len(df),
+                        freq="H",
+                    )
+                return df[["timestamp", "close"]]
+
+        if isinstance(series, pd.Series):
+            return pd.DataFrame(
+                {
+                    "timestamp": pd.date_range(
+                        end=datetime.now(timezone.utc),
+                        periods=len(series),
+                        freq="H",
+                    ),
+                    "close": series.values,
+                }
+            )
+
+        if isinstance(series, list):
+            return pd.DataFrame(
+                {
+                    "timestamp": pd.date_range(
+                        end=datetime.now(timezone.utc),
+                        periods=len(series),
+                        freq="H",
+                    ),
+                    "close": series,
+                }
+            )
     except Exception:
         pass
 
-    # 2️⃣ Try CoinGecko
-    try:
-        if hasattr(coingecko, "get_sol_price"):
-            price = coingecko.get_sol_price()
-            if price is not None:
-                _CACHE["price"] = float(price)
-                _CACHE["timestamp"] = now
-                return _CACHE["price"]
-    except Exception:
-        pass
+    return _empty_price_df()
+
+
+# ==============================
+# PUBLIC API (USED BY APP)
+# ==============================
+
+def get_current_price(symbol: str = "SOL") -> float | None:
+    """
+    Returns float price or None (never raises)
+    """
+    # Try CoinGecko
+    if CG_CURRENT:
+        try:
+            price = CG_CURRENT(symbol)
+            if isinstance(price, (int, float)):
+                return float(price)
+        except Exception:
+            pass
+
+    # Fallback Yahoo Finance
+    if YF_CURRENT:
+        try:
+            price = YF_CURRENT(symbol)
+            if isinstance(price, (int, float)):
+                return float(price)
+        except Exception:
+            pass
 
     return None
 
 
-# =================================================
-# PRICE HISTORY (SAFE)
-# =================================================
-def get_price_history(days=200):
-    global _CACHE
-    now = time.time()
+def get_price_history(
+    symbol: str = "SOL",
+    days: int = 7,
+) -> pd.DataFrame:
+    """
+    ALWAYS returns DataFrame with:
+    ['timestamp', 'close']
+    """
 
-    if _CACHE["history"] is not None and now - _CACHE["timestamp"] < CACHE_TTL:
-        return _CACHE["history"]
-
-    # 1️⃣ Try yfinance
-    try:
-        if hasattr(yfinance, "get_sol_price_history"):
-            df = yfinance.get_sol_price_history(days=days)
-            if isinstance(df, pd.DataFrame) and not df.empty:
-                _CACHE["history"] = df
-                _CACHE["timestamp"] = now
+    # --- Try CoinGecko ---
+    if CG_HISTORY:
+        try:
+            raw = CG_HISTORY(symbol, days=days)
+            df = _normalize_series_to_df(raw)
+            if not df.empty:
                 return df
-    except Exception:
-        pass
+        except Exception:
+            pass
 
-    # 2️⃣ Try CoinGecko
-    try:
-        if hasattr(coingecko, "get_sol_price_history"):
-            df = coingecko.get_sol_price_history(days=days)
-            if isinstance(df, pd.DataFrame) and not df.empty:
-                _CACHE["history"] = df
-                _CACHE["timestamp"] = now
+    # --- Fallback Yahoo Finance ---
+    if YF_HISTORY:
+        try:
+            raw = YF_HISTORY(symbol, days=days)
+            df = _normalize_series_to_df(raw)
+            if not df.empty:
                 return df
-    except Exception:
-        pass
+        except Exception:
+            pass
 
-    return None
+    # --- Last resort ---
+    return _empty_price_df()
