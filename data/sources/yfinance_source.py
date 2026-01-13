@@ -1,34 +1,11 @@
 import yfinance as yf
-import pandas as pd
 
-
-def get_sol_price_yfinance():
-    """
-    Fetch current SOL price using Yahoo Finance.
-    """
+def get_sol_price():
     try:
         ticker = yf.Ticker("SOL-USD")
-        price = ticker.history(period="1d")["Close"].iloc[-1]
-        return float(price)
-    except Exception:
-        return None
-
-
-def get_sol_price_history_yfinance(days: int = 200):
-    """
-    Fetch historical SOL price data using Yahoo Finance.
-    Returns DataFrame with 'close' column.
-    """
-    try:
-        ticker = yf.Ticker("SOL-USD")
-        df = ticker.history(period=f"{days}d")
-
-        if df.empty:
+        data = ticker.history(period="1d", interval="1m")
+        if data.empty:
             return None
-
-        df = df[["Close"]]
-        df.rename(columns={"Close": "close"}, inplace=True)
-
-        return df
+        return float(data["Close"].iloc[-1])
     except Exception:
         return None
