@@ -1,12 +1,22 @@
-def calculate_trend_strength(price_df):
-    if "close" not in price_df or len(price_df) < 20:
-        return {"value": None, "score": 0, "signal": "Unavailable"}
+import pandas as pd
 
-    momentum = price_df["close"].iloc[-1] - price_df["close"].iloc[-20]
 
-    if momentum > 0:
-        return {"value": round(momentum, 2), "score": 1, "signal": "Bullish"}
-    elif momentum < 0:
-        return {"value": round(momentum, 2), "score": -1, "signal": "Bearish"}
+def calculate_trend_strength(close: pd.Series) -> dict:
+    """
+    Measures trend strength using price displacement.
+    """
+
+    if close is None or len(close) < 30:
+        return {"signal": "Unavailable"}
+
+    recent = close.iloc[-1]
+    past = close.iloc[-20]
+
+    delta = (recent - past) / past
+
+    if delta > 0.03:
+        return {"signal": "Bullish"}
+    elif delta < -0.03:
+        return {"signal": "Bearish"}
     else:
-        return {"value": 0, "score": 0, "signal": "Neutral"}
+        return {"signal": "Neutral"}
