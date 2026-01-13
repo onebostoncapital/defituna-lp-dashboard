@@ -1,29 +1,27 @@
-# data/sources/coingecko.py
-
 import requests
+import pandas as pd
+from datetime import datetime
 
-BASE_URL = "https://api.coingecko.com/api/v3"
-
-
-def get_current_price_from_coingecko(symbol: str) -> float:
-    url = f"{BASE_URL}/simple/price"
-    params = {
-        "ids": symbol.lower(),
-        "vs_currencies": "usd"
-    }
-    r = requests.get(url, params=params, timeout=10)
-    r.raise_for_status()
-    data = r.json()
-    return data[symbol.lower()]["usd"]
+COINGECKO_API = "https://api.coingecko.com/api/v3"
 
 
-def get_price_history_from_coingecko(symbol: str, days: int):
-    url = f"{BASE_URL}/coins/{symbol.lower()}/market_chart"
-    params = {
-        "vs_currency": "usd",
-        "days": days
-    }
-    r = requests.get(url, params=params, timeout=10)
-    r.raise_for_status()
-    data = r.json()
-    return data.get("prices", [])
+def fetch_price_history(symbol: str, days: int = 7) -> pd.DataFrame:
+    try:
+        url = f"{COINGECKO_API}/coins/{symbol}/market_chart"
+        params = {"vs_currency": "usd", "days": days}
+
+        r = requests.get(url, params=params, timeout=10)
+        r.raise_for_status()
+
+        prices = r.json().get("prices", [])
+        if not prices:
+            raise ValueError("Empty price data from CoinGecko")
+
+        df = pd.DataFrame(prices, columns=["timestamp", "close"])
+        df["timestamp"] = pd.to_datetime(df["timestamp"], unit="ms")
+        df.set_index("timestamp", inplace=True)
+
+        return df[["close"]]
+
+    except Exception as e:
+        raise RuntimeError(f"CoinGecko price fetch failed: {e}")

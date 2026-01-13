@@ -1,42 +1,50 @@
-# data/store/price_store.py
-
 import pandas as pd
-from data.sources.coingecko import (
-    get_current_price_from_coingecko,
-    get_price_history_from_coingecko
-)
 
-# ---------------------------------------------
-# PUBLIC API — USED BY app/main.py
-# ---------------------------------------------
+from data.sources.coingecko import fetch_price_history as cg_fetch
+from data.sources.yfinance_source import fetch_price_history as yf_fetch
 
-def get_current_price(symbol: str) -> float | None:
-    """
-    Returns current price as FLOAT
-    """
+
+SYMBOL_MAP = {
+    "SOL": {
+        "coingecko": "solana",
+        "yfinance": "SOL-USD"
+    }
+}
+
+
+def get_price_history(symbol: str, days: int = 7) -> pd.DataFrame:
+    if symbol not in SYMBOL_MAP:
+        raise ValueError(f"Unsupported symbol: {symbol}")
+
+    errors = []
+
+    # 1️⃣ Try CoinGecko
     try:
-        price = get_current_price_from_coingecko(symbol)
-        return float(price)
-    except Exception:
-        return None
+        df = cg_fetch(SYMBOL_MAP[symbol]["coingecko"], days)
+        if _validate_df(df):
+            return df
+    except Exception as e:
+        errors.append(str(e))
 
-
-def get_price_history(symbol: str, days: int = 7) -> pd.DataFrame | None:
-    """
-    Returns price history as DataFrame with column: close
-    """
+    # 2️⃣ Fallback to yFinance
     try:
-        raw = get_price_history_from_coingecko(symbol, days)
+        df = yf_fetch(SYMBOL_MAP[symbol]["yfinance"], days)
+        if _validate_df(df):
+            return df
+    except Exception as e:
+        errors.append(str(e))
 
-        if raw is None or len(raw) == 0:
-            return None
+    raise RuntimeError("Price layer failed:\n" + "\n".join(errors))
 
-        # EXPECTED raw = list of [timestamp, price]
-        df = pd.DataFrame(raw, columns=["timestamp", "close"])
-        df["close"] = pd.to_numeric(df["close"], errors="coerce")
-        df = df.dropna().reset_index(drop=True)
 
-        return df
+def get_current_price(symbol: str) -> float:
+    df = get_price_history(symbol, days=1)
+    return float(df["close"].iloc[-1])
 
-    except Exception:
-        return None
+
+def _validate_df(df: pd.DataFrame) -> bool:
+    return (
+        isinstance(df, pd.DataFrame)
+        and not df.empty
+        and "close" in df.columns
+    )
