@@ -1,9 +1,15 @@
 def calculate_ma200(price_df):
-    close = price_df["close"]
-    ma200 = close.rolling(200).mean().iloc[-1]
-    latest = close.iloc[-1]
+    if "close" not in price_df or len(price_df) < 200:
+        return {"value": None, "score": 0, "signal": "Unavailable"}
 
-    if latest > ma200:
-        return {"signal": "Bullish", "score": 1.0}
-    else:
-        return {"signal": "Bearish", "score": -1.0}
+    ma200 = price_df["close"].rolling(200).mean().iloc[-1]
+    price = price_df["close"].iloc[-1]
+
+    signal = "Bullish" if price > ma200 else "Bearish"
+    score = 2 if signal == "Bullish" else -2
+
+    return {
+        "value": round(ma200, 2),
+        "score": score,
+        "signal": signal
+    }

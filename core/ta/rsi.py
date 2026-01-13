@@ -1,32 +1,29 @@
-import pandas as pd
-
 def calculate_rsi(price_df, period=14):
-    close = price_df["close"]
+    if "close" not in price_df or len(price_df) < period + 1:
+        return {"value": None, "score": 0, "signal": "Unavailable"}
 
-    delta = close.diff()
+    delta = price_df["close"].diff()
     gain = delta.clip(lower=0)
     loss = -delta.clip(upper=0)
 
-    avg_gain = gain.rolling(period).mean()
-    avg_loss = loss.rolling(period).mean()
+    avg_gain = gain.rolling(period).mean().iloc[-1]
+    avg_loss = loss.rolling(period).mean().iloc[-1]
+
+    if avg_loss == 0:
+        return {"value": 100, "score": -1, "signal": "Overbought"}
 
     rs = avg_gain / avg_loss
     rsi = 100 - (100 / (1 + rs))
 
-    latest = rsi.iloc[-1]
-
-    if latest < 30:
-        signal = "Bullish"
-        score = 1.0
-    elif latest > 70:
-        signal = "Bearish"
-        score = -1.0
+    if rsi < 30:
+        signal, score = "Oversold", 1
+    elif rsi > 70:
+        signal, score = "Overbought", -1
     else:
-        signal = "Neutral"
-        score = 0.0
+        signal, score = "Neutral", 0
 
     return {
-        "value": round(float(latest), 2),
-        "signal": signal,
-        "score": score
+        "value": round(rsi, 2),
+        "score": score,
+        "signal": signal
     }

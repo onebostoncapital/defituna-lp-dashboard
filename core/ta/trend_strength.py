@@ -1,36 +1,12 @@
 def calculate_trend_strength(price_df):
-    """
-    Calculates simple momentum-based trend strength.
-    Safe against short data series.
-    """
+    if "close" not in price_df or len(price_df) < 20:
+        return {"value": None, "score": 0, "signal": "Unavailable"}
 
-    close = price_df["close"]
-
-    # --- SAFETY GUARD
-    if len(close) < 20:
-        return {
-            "score": 0,
-            "label": "Neutral",
-            "driver": "Trend strength unavailable (insufficient data)"
-        }
-
-    momentum = close.iloc[-1] - close.iloc[-20]
+    momentum = price_df["close"].iloc[-1] - price_df["close"].iloc[-20]
 
     if momentum > 0:
-        return {
-            "score": 1,
-            "label": "Bullish",
-            "driver": "Positive 20-period momentum"
-        }
+        return {"value": round(momentum, 2), "score": 1, "signal": "Bullish"}
     elif momentum < 0:
-        return {
-            "score": -1,
-            "label": "Bearish",
-            "driver": "Negative 20-period momentum"
-        }
+        return {"value": round(momentum, 2), "score": -1, "signal": "Bearish"}
     else:
-        return {
-            "score": 0,
-            "label": "Neutral",
-            "driver": "Flat momentum"
-        }
+        return {"value": 0, "score": 0, "signal": "Neutral"}
