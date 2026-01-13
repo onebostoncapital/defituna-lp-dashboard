@@ -1,112 +1,51 @@
+# app/main.py
+
+import os
+import sys
 import streamlit as st
 
-from data.store.price_store import (
-    get_current_price,
-    get_price_history
-)
+PROJECT_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
+sys.path.insert(0, PROJECT_ROOT)
 
+from data.store import get_current_price, get_price_history
 from core.strategy.fusion_engine import fuse_signals
 
-# =============================
-# APP CONFIG
-# =============================
+# ---------------------------------------------
+# STREAMLIT SETUP
+# ---------------------------------------------
 
-st.set_page_config(
-    page_title="DeFiTuna LP Dashboard",
-    layout="wide"
-)
-
+st.set_page_config(page_title="DeFiTuna LP Dashboard", layout="wide")
 st.title("DeFiTuna LP Dashboard")
 st.caption("Multi-Range Liquidity Intelligence System")
 
-# =============================
-# PRICE DATA
-# =============================
+symbol = "solana"
 
-price = get_current_price()
+# ---------------------------------------------
+# PRICE FETCH
+# ---------------------------------------------
 
-if price is None:
+with st.spinner("Fetching price data..."):
+    current_price = get_current_price(symbol)
+    price_history = get_price_history(symbol, days=7)
+
+if current_price is None or price_history is None:
     st.error("Price data unavailable.")
     st.stop()
 
-st.subheader("SOL Price")
-st.metric("Current Price", f"${price:,.2f}")
-
-price_history = get_price_history(days=7)
-
-if price_history.empty:
-    st.error("Historical price data unavailable.")
-    st.stop()
-
-# =============================
-# STRATEGY ENGINE
-# =============================
+# ---------------------------------------------
+# CORE ENGINE
+# ---------------------------------------------
 
 fusion_output = fuse_signals(price_history)
 
-# =============================
-# MARKET STATE
-# =============================
+# ---------------------------------------------
+# DISPLAY
+# ---------------------------------------------
+
+st.subheader("SOL Price")
+st.metric("Current Price", f"${current_price:,.2f}")
 
 st.subheader("Market State")
-
-c1, c2, c3 = st.columns(3)
-
-c1.metric("Direction", fusion_output.get("direction", "N/A"))
-c2.metric("Regime", fusion_output.get("regime", "Unavailable"))
-c3.metric("Confidence", fusion_output.get("confidence", 0.0))
-
-# =============================
-# ACTIVE STRATEGY
-# =============================
-
-st.subheader("Active LP Strategy")
-
-st.write("Mode:", fusion_output.get("active_mode", "Defensive"))
-st.write("Capital Allocation (%):", fusion_output.get("capital_allocation", 0))
-st.write("Liquidity Floor (%):", fusion_output.get("liquidity_floor", 0))
-
-reason = fusion_output.get("active_reason")
-if reason:
-    st.info(reason)
-
-# =============================
-# LIQUIDITY RANGES
-# =============================
-
-st.subheader("Liquidity Ranges (All Modes)")
-
-ranges = fusion_output.get("ranges")
-
-if not ranges:
-    st.warning("Range engine not active yet.")
-else:
-    for mode, r in ranges.items():
-        st.markdown(f"**{mode}**")
-        st.write(
-            f"Low: ${r['low']:.2f} | High: ${r['high']:.2f} | Width: {r['width_pct']:.1f}%"
-        )
-
-# =============================
-# TECHNICAL ANALYSIS
-# =============================
-
-st.subheader("Technical Analysis")
-
-st.metric("TA Score", fusion_output.get("ta_score", 0))
-st.write("Volatility Regime:", fusion_output.get("volatility_regime", "Unavailable"))
-st.write("Trend Strength:", fusion_output.get("trend_strength", "Unavailable"))
-
-# =============================
-# TECHNICAL DRIVERS
-# =============================
-
-st.subheader("Technical Drivers")
-
-drivers = fusion_output.get("ta_drivers", [])
-
-if not drivers:
-    st.info("No technical drivers available.")
-else:
-    for d in drivers:
-        st.write("•", d)
+st.write("Direction:", fusion_output.get("direction", "N/A"))
+st.write("Regime:", fusion_output.get("regime", "N/A"))
+st.write("Confidence:", fusion_output.get("confidence", 0.0))

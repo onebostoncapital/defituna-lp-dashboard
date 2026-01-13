@@ -1,40 +1,42 @@
-from data.sources.coingecko import get_sol_price as cg_price
-from data.sources.yfinance_source import get_sol_price as yf_price
+# data/store/price_store.py
 
 import pandas as pd
-import yfinance as yf
+from data.sources.coingecko import (
+    get_current_price_from_coingecko,
+    get_price_history_from_coingecko
+)
 
+# ---------------------------------------------
+# PUBLIC API — USED BY app/main.py
+# ---------------------------------------------
 
-# =============================
-# CURRENT PRICE (MULTI-SOURCE)
-# =============================
-
-def get_current_price():
-    price = cg_price()
-    if price is not None:
-        return price
-
-    price = yf_price()
-    if price is not None:
-        return price
-
-    return None
-
-
-# =============================
-# PRICE HISTORY (7D DEFAULT)
-# =============================
-
-def get_price_history(days: int = 7) -> pd.DataFrame:
+def get_current_price(symbol: str) -> float | None:
+    """
+    Returns current price as FLOAT
+    """
     try:
-        ticker = yf.Ticker("SOL-USD")
-        df = ticker.history(period=f"{days}d", interval="1h")
-
-        if df.empty or "Close" not in df:
-            return pd.DataFrame()
-
-        return pd.DataFrame({
-            "close": df["Close"]
-        })
+        price = get_current_price_from_coingecko(symbol)
+        return float(price)
     except Exception:
-        return pd.DataFrame()
+        return None
+
+
+def get_price_history(symbol: str, days: int = 7) -> pd.DataFrame | None:
+    """
+    Returns price history as DataFrame with column: close
+    """
+    try:
+        raw = get_price_history_from_coingecko(symbol, days)
+
+        if raw is None or len(raw) == 0:
+            return None
+
+        # EXPECTED raw = list of [timestamp, price]
+        df = pd.DataFrame(raw, columns=["timestamp", "close"])
+        df["close"] = pd.to_numeric(df["close"], errors="coerce")
+        df = df.dropna().reset_index(drop=True)
+
+        return df
+
+    except Exception:
+        return None
