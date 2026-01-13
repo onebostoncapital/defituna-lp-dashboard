@@ -1,23 +1,34 @@
-def calibrate_confidence(ta_score: float, fa_score: float, regime: str) -> float:
+# core/ai/confidence_calibration.py
+
+def calibrate_confidence(
+    ta_score: float,
+    regime: str,
+    fa_score: float | None = None
+) -> float:
     """
-    Calibrate final confidence score based on TA, FA, and market regime.
-    Returns a value between 0.0 and 1.0
+    Calibrates confidence score using TA + optional FA + regime.
+
+    - ta_score: 0 → 1
+    - fa_score: 0 → 1 (optional)
+    - regime: market regime string
     """
 
-    # Base confidence from signal strength
-    base_confidence = abs(ta_score) * 0.6 + abs(fa_score) * 0.4
+    # Normalize inputs
+    ta_score = max(0.0, min(1.0, ta_score))
+
+    if fa_score is None:
+        fa_score = 0.5  # Neutral FA fallback
+
+    fa_score = max(0.0, min(1.0, fa_score))
+
+    # Base confidence blend
+    confidence = (ta_score * 0.7) + (fa_score * 0.3)
 
     # Regime adjustment
-    if regime == "Trending":
-        regime_multiplier = 1.1
-    elif regime == "Ranging":
-        regime_multiplier = 0.9
-    else:  # Uncertain / High risk
-        regime_multiplier = 0.75
+    if regime in ["High Volatility", "Uncertain"]:
+        confidence *= 0.8
+    elif regime in ["Trending", "Normal"]:
+        confidence *= 1.05
 
-    confidence = base_confidence * regime_multiplier
-
-    # Clamp between 0 and 1
-    confidence = max(0.0, min(round(confidence, 2), 1.0))
-
-    return confidence
+    # Final clamp
+    return round(max(0.0, min(1.0, confidence)), 2)
