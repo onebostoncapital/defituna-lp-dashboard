@@ -1,89 +1,104 @@
-# data/store/price_store.py
-
 import pandas as pd
-import requests
-from datetime import datetime, timedelta
+from typing import Optional
+
+# ==============================
+# INTERNAL NORMALIZATION (CORE)
+# ==============================
+
+def _normalize_price_df(df: pd.DataFrame) -> pd.DataFrame:
+    """
+    GUARANTEE:
+    - Return a DataFrame
+    - Must contain column: 'close'
+    - Must be numeric
+    - Must be clean (no NaN)
+    """
+
+    if df is None or df.empty:
+        return pd.DataFrame(columns=["close"])
+
+    # If already correct
+    if "close" in df.columns:
+        close = df["close"]
+
+    # Common alternative names
+    elif "price" in df.columns:
+        close = df["price"]
+
+    elif "Close" in df.columns:
+        close = df["Close"]
+
+    # If single column dataframe
+    elif df.shape[1] == 1:
+        close = df.iloc[:, 0]
+
+    else:
+        # Hard fail-safe
+        return pd.DataFrame(columns=["close"])
+
+    close = pd.to_numeric(close, errors="coerce").dropna()
+
+    return pd.DataFrame({"close": close})
 
 
-# ======================================================
-# INTERNAL HELPERS
-# ======================================================
+# ==============================
+# PRICE SOURCES
+# ==============================
 
-def _fetch_coingecko(symbol: str, days: int):
+def _fetch_from_coingecko(days: int) -> pd.DataFrame:
+    from data.sources.coingecko import fetch_price_history
+
+    raw = fetch_price_history(days=days)
+
+    if isinstance(raw, list):
+        # CoinGecko format: [[timestamp, price], ...]
+        prices = [p[1] for p in raw]
+        return pd.DataFrame({"close": prices})
+
+    return raw
+
+
+def _fetch_from_yfinance(days: int) -> pd.DataFrame:
+    from data.sources.yfinance_source import fetch_price_history
+
+    return fetch_price_history(days=days)
+
+
+# ==============================
+# PUBLIC API (ONLY THESE ARE USED)
+# ==============================
+
+def get_price_history(
+    days: int = 7,
+    source: str = "coingecko"
+) -> pd.DataFrame:
+    """
+    ALWAYS returns:
+    DataFrame with column: ['close']
+    """
+
     try:
-        url = "https://api.coingecko.com/api/v3/coins/solana/market_chart"
-        params = {"vs_currency": "usd", "days": days}
-        r = requests.get(url, params=params, timeout=10)
-        r.raise_for_status()
+        if source == "yfinance":
+            raw_df = _fetch_from_yfinance(days)
+        else:
+            raw_df = _fetch_from_coingecko(days)
 
-        prices = r.json()["prices"]
-        df = pd.DataFrame(prices, columns=["timestamp", "close"])
-        df["timestamp"] = pd.to_datetime(df["timestamp"], unit="ms")
-        df.set_index("timestamp", inplace=True)
-        df["close"] = df["close"].astype(float)
-
-        return df
+        return _normalize_price_df(raw_df)
 
     except Exception:
-        return None
+        # Absolute safety
+        return pd.DataFrame(columns=["close"])
 
 
-def _fetch_yfinance(symbol: str, days: int):
-    try:
-        import yfinance as yf
-
-        ticker = yf.Ticker(f"{symbol}-USD")
-        hist = ticker.history(period=f"{days}d")
-
-        if hist.empty:
-            return None
-
-        df = hist[["Close"]].copy()
-        df.columns = ["close"]
-        df.index = pd.to_datetime(df.index)
-
-        return df
-
-    except Exception:
-        return None
-
-
-# ======================================================
-# PUBLIC API (USED BY APP)
-# ======================================================
-
-def get_price_history(symbol: str, days: int = 7) -> pd.DataFrame:
+def get_current_price(source: str = "coingecko") -> Optional[float]:
     """
-    Returns DataFrame with:
-    - index: datetime
-    - column: close (float)
+    ALWAYS returns:
+    - float price OR None
     """
 
-    # 1️⃣ Try CoinGecko first
-    df = _fetch_coingecko(symbol, days)
-    if df is not None and not df.empty:
-        return df
-
-    # 2️⃣ Fallback to Yahoo Finance
-    df = _fetch_yfinance(symbol, days)
-    if df is not None and not df.empty:
-        return df
-
-    # 3️⃣ HARD FAIL (controlled)
-    return pd.DataFrame(columns=["close"])
-
-
-def get_current_price(symbol: str) -> float | None:
-    """
-    Returns latest price as float or None
-    """
-
-    df = get_price_history(symbol, days=1)
+    df = get_price_history(days=1, source=source)
 
     if df.empty:
         return None
 
-    try:
-        return float(df["close"].iloc[-1])
-    except Exception:
-        return None
+    return float(df["close"].iloc[-1])
