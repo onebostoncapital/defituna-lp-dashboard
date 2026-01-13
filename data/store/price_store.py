@@ -12,9 +12,23 @@ SYMBOL_MAP = {
 }
 
 
+def normalize_symbol(symbol: str) -> str:
+    """
+    Normalizes user / UI symbols into canonical internal symbols.
+    """
+    if not symbol:
+        raise ValueError("Empty symbol")
+
+    symbol = symbol.upper().strip()
+
+    if symbol in ["SOL", "SOLANA", "SOL-USD"]:
+        return "SOL"
+
+    raise ValueError(f"Unsupported symbol: {symbol}")
+
+
 def get_price_history(symbol: str, days: int = 7) -> pd.DataFrame:
-    if symbol not in SYMBOL_MAP:
-        raise ValueError(f"Unsupported symbol: {symbol}")
+    symbol = normalize_symbol(symbol)
 
     errors = []
 
