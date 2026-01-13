@@ -1,32 +1,18 @@
-import sys
-import os
 import streamlit as st
 
-# =====================================================
-# FIX: Ensure project root is on Python path
-# =====================================================
-PROJECT_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
-if PROJECT_ROOT not in sys.path:
-    sys.path.insert(0, PROJECT_ROOT)
-
-# =====================================================
-# Imports (NOW SAFE)
-# =====================================================
+# -----------------------------
+# SAFE IMPORTS
+# -----------------------------
 try:
     from data.store.price_store import get_current_price, get_price_history
-except Exception as e:
-    st.error(f"Price layer import failed: {e}")
-    st.stop()
-
-try:
     from core.strategy.fusion_engine import fuse_signals
 except Exception as e:
-    st.error(f"Strategy engine import failed: {e}")
+    st.error(f"Critical import failure: {e}")
     st.stop()
 
-# =====================================================
-# Page Config
-# =====================================================
+# -----------------------------
+# APP CONFIG
+# -----------------------------
 st.set_page_config(
     page_title="DeFiTuna LP Dashboard",
     layout="wide"
@@ -35,104 +21,96 @@ st.set_page_config(
 st.title("DeFiTuna LP Dashboard")
 st.caption("Multi-Range Liquidity Intelligence System")
 
-# =====================================================
-# Symbol Config
-# =====================================================
+# -----------------------------
+# SYMBOL CONFIG
+# -----------------------------
 symbol = "SOL"
 
-# =====================================================
-# PRICE LAYER
-# =====================================================
+# -----------------------------
+# PRICE LAYER (SAFE)
+# -----------------------------
 try:
     current_price = get_current_price(symbol)
-    price_history = get_price_history(symbol, days=7)
+    price_history = get_price_history(symbol, days=60)  # 60 days REQUIRED for TA
 except Exception as e:
-    st.error("Price data unavailable.")
-    st.exception(e)
+    st.error(f"Price data unavailable: {e}")
     st.stop()
 
-# =====================================================
-# PRICE DISPLAY
-# =====================================================
+# -----------------------------
+# DISPLAY PRICE
+# -----------------------------
 st.subheader("SOL Price")
-st.metric("Current Price", f"${current_price:,.2f}")
+st.metric("Current Price", f"${current_price:.2f}")
 
-# =====================================================
-# STRATEGY ENGINE
-# =====================================================
+# -----------------------------
+# FUSION ENGINE
+# -----------------------------
 try:
     fusion_output = fuse_signals(price_history)
 except Exception as e:
-    st.error("Strategy engine failed")
-    st.exception(e)
+    st.error(f"Strategy engine failed: {e}")
     st.stop()
 
-# =====================================================
-# NORMALIZATION (CRITICAL UI SAFETY)
-# =====================================================
-direction = fusion_output.get("direction", "Unavailable")
-regime = fusion_output.get("regime", "Unavailable")
-confidence = fusion_output.get("confidence", 0.0)
-
-strategy = fusion_output.get("strategy")
-if isinstance(strategy, str):
-    strategy = {
-        "mode": strategy,
-        "capital_allocation_pct": 0,
-        "liquidity_floor_pct": 0,
-        "reason": "Default strategy fallback"
-    }
-elif strategy is None:
-    strategy = {
-        "mode": "Unavailable",
-        "capital_allocation_pct": 0,
-        "liquidity_floor_pct": 0,
-        "reason": "Strategy engine not active"
-    }
-
-ta = fusion_output.get("ta", {})
-ta_score = ta.get("score", 0)
-ta_drivers = ta.get("drivers", [])
-
-# =====================================================
+# -----------------------------
 # MARKET STATE
-# =====================================================
+# -----------------------------
 st.subheader("Market State")
 c1, c2, c3 = st.columns(3)
-c1.metric("Direction", direction)
-c2.metric("Regime", regime)
-c3.metric("Confidence", round(confidence, 2))
 
-# =====================================================
-# ACTIVE LP STRATEGY
-# =====================================================
+c1.write("Direction")
+c1.write(fusion_output.get("direction", "Unavailable"))
+
+c2.write("Regime")
+c2.write(fusion_output.get("regime", "Unavailable"))
+
+c3.write("Confidence")
+c3.write(round(fusion_output.get("confidence", 0.0), 2))
+
+# -----------------------------
+# ACTIVE STRATEGY
+# -----------------------------
 st.subheader("Active LP Strategy")
+
+strategy = fusion_output.get("strategy", {})
+
 st.write("Mode:", strategy.get("mode", "Unavailable"))
-st.write("Capital Allocation (%):", strategy.get("capital_allocation_pct", 0))
+st.write("Capital Allocation (%):", strategy.get("capital_pct", 0))
 st.write("Liquidity Floor (%):", strategy.get("liquidity_floor_pct", 0))
-st.info(strategy.get("reason", ""))
 
-# =====================================================
+st.info(fusion_output.get("active_reason", "Strategy engine not active"))
+
+# -----------------------------
 # LIQUIDITY RANGES
-# =====================================================
+# -----------------------------
 st.subheader("Liquidity Ranges (All Modes)")
-st.warning("Range engine not active yet.")
 
-# =====================================================
+ranges = fusion_output.get("ranges", [])
+if not ranges:
+    st.warning("Range engine not active yet.")
+else:
+    for r in ranges:
+        st.write(r)
+
+# -----------------------------
 # TECHNICAL ANALYSIS
-# =====================================================
+# -----------------------------
 st.subheader("Technical Analysis")
+
+ta = fusion_output.get("ta_summary", {})
+
 c1, c2, c3 = st.columns(3)
-c1.metric("TA Score", ta_score)
+c1.metric("TA Score", ta.get("score", 0))
 c2.metric("Volatility Regime", ta.get("volatility_regime", "Unavailable"))
 c3.metric("Trend Strength", ta.get("trend_strength", "Unavailable"))
 
-# =====================================================
+# -----------------------------
 # TECHNICAL DRIVERS
-# =====================================================
+# -----------------------------
 st.subheader("Technical Drivers")
-if ta_drivers:
-    for d in ta_drivers:
-        st.write(f"• {d}")
+
+drivers = fusion_output.get("ta_drivers", [])
+if not drivers:
+    st.write("No technical drivers available.")
 else:
-    st.caption("No technical drivers available.")
+    for d in drivers:
+        st.write(f"• {d}")
