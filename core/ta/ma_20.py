@@ -1,9 +1,6 @@
-def calculate_ma20(price_df):
-    close = price_df["close"].astype(float)
-    ma20 = close.rolling(20).mean().iloc[-1]
-    price = close.iloc[-1]
+import pandas as pd
 
-    if price > ma20:
-        return {"score": 0.3, "label": "MA20: Bullish"}
-    else:
-        return {"score": -0.3, "label": "MA20: Bearish"}
+def ma_20(price_series: pd.Series) -> bool | None:
+    if len(price_series) < 20:
+        return None
+    return price_series.iloc[-1] > price_series.rolling(20).mean().iloc[-1]

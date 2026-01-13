@@ -1,13 +1,6 @@
-def calculate_ma200(price_df):
-    close = price_df["close"].astype(float)
+import pandas as pd
 
-    if len(close) < 200:
-        return {"score": 0.0, "label": "MA200: Insufficient data"}
-
-    ma200 = close.rolling(200).mean().iloc[-1]
-    price = close.iloc[-1]
-
-    if price > ma200:
-        return {"score": 0.4, "label": "MA200: Bullish"}
-    else:
-        return {"score": -0.4, "label": "MA200: Bearish"}
+def ma_200(price_series: pd.Series) -> bool | None:
+    if len(price_series) < 200:
+        return None
+    return price_series.iloc[-1] > price_series.rolling(200).mean().iloc[-1]

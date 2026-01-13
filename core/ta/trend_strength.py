@@ -1,12 +1,13 @@
-def calculate_trend_strength(price_df):
-    close = price_df["close"].astype(float)
+import pandas as pd
 
-    if len(close) < 20:
-        return {"score": 0.0, "label": "Trend: Unavailable"}
+def trend_strength(price_series: pd.Series) -> str:
+    if len(price_series) < 20:
+        return "Insufficient data"
 
-    momentum = close.iloc[-1] - close.iloc[-20]
+    momentum = price_series.iloc[-1] - price_series.iloc[-20]
 
     if momentum > 0:
-        return {"score": 0.3, "label": "Trend: Bullish"}
-    else:
-        return {"score": -0.3, "label": "Trend: Bearish"}
+        return "Bullish"
+    elif momentum < 0:
+        return "Bearish"
+    return "Neutral"

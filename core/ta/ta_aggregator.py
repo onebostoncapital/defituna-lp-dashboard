@@ -1,64 +1,52 @@
-# core/ta/ta_aggregator.py
-
 from core.ta.rsi import calculate_rsi
-from core.ta.ma_20 import calculate_ma20
-from core.ta.trend_strength import calculate_trend_strength
-from core.ta.volatility import calculate_volatility
+from core.ta.ma_20 import ma_20
+from core.ta.ma_200 import ma_200
+from core.ta.trend_strength import trend_strength
 
-
-def _score_signal(signal: str) -> float:
-    """
-    Convert qualitative signal into numeric score.
-    """
-    if signal == "Bullish":
-        return 1.0
-    if signal == "Neutral":
-        return 0.5
-    if signal == "Bearish":
-        return 0.0
-    return 0.0
-
-
-def aggregate_ta_signals(price_df):
-    """
-    Aggregate TA indicators into:
-    - TA Score (0–1)
-    - Volatility regime
-    - Trend strength
-    - Human-readable drivers
-    """
-
+def run_ta(price_df):
+    price_series = price_df["price"]
     drivers = []
+    score = 50
 
-    # --- RSI ---
-    rsi_signal = calculate_rsi(price_df)
-    rsi_score = _score_signal(rsi_signal["signal"])
-    drivers.append(f"RSI: {rsi_signal['signal']}")
+    rsi = calculate_rsi(price_series)
+    if rsi is not None:
+        if rsi < 30:
+            drivers.append("RSI: Oversold (Bullish)")
+            score += 15
+        elif rsi > 70:
+            drivers.append("RSI: Overbought (Bearish)")
+            score -= 15
+        else:
+            drivers.append("RSI: Neutral")
 
-    # --- MA20 ---
-    ma20_signal = calculate_ma20(price_df)
-    ma20_score = _score_signal(ma20_signal["signal"])
-    drivers.append(f"MA20: {ma20_signal['signal']}")
+    ma20 = ma_20(price_series)
+    if ma20 is True:
+        drivers.append("MA20: Bullish")
+        score += 10
+    elif ma20 is False:
+        drivers.append("MA20: Bearish")
+        score -= 10
+    else:
+        drivers.append("MA20: Insufficient data")
 
-    # --- Trend ---
-    trend_signal = calculate_trend_strength(price_df)
-    trend_score = _score_signal(trend_signal["signal"])
-    drivers.append(f"Trend: {trend_signal['signal']}")
+    ma200 = ma_200(price_series)
+    if ma200 is True:
+        drivers.append("MA200: Bullish")
+        score += 10
+    elif ma200 is False:
+        drivers.append("MA200: Bearish")
+        score -= 10
+    else:
+        drivers.append("MA200: Insufficient data")
 
-    # --- Volatility ---
-    volatility = calculate_volatility(price_df)
+    trend = trend_strength(price_series)
+    drivers.append(f"Trend: {trend}")
 
-    # --- Weighted TA Score ---
-    ta_score = round(
-        (0.30 * rsi_score) +
-        (0.30 * ma20_score) +
-        (0.40 * trend_score),
-        2
-    )
+    score = max(0, min(100, score))
 
     return {
-        "ta_score": ta_score,
-        "volatility_regime": volatility["regime"],
-        "trend_strength": trend_signal["signal"],
-        "drivers": drivers,
+        "ta_score": score,
+        "trend": trend,
+        "volatility": "Normal",
+        "drivers": drivers
     }

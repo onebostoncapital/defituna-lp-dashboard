@@ -1,64 +1,20 @@
 import pandas as pd
+from data.sources.coingecko import fetch_price_history
 
-from data.sources.coingecko import fetch_price_history as cg_fetch
-from data.sources.yfinance_source import fetch_price_history as yf_fetch
-
-
-SYMBOL_MAP = {
-    "SOL": {
-        "coingecko": "solana",
-        "yfinance": "SOL-USD"
-    }
+SUPPORTED_SYMBOLS = {
+    "sol": "solana"
 }
 
-
-def normalize_symbol(symbol: str) -> str:
-    """
-    Normalizes user / UI symbols into canonical internal symbols.
-    """
-    if not symbol:
-        raise ValueError("Empty symbol")
-
-    symbol = symbol.upper().strip()
-
-    if symbol in ["SOL", "SOLANA", "SOL-USD"]:
-        return "SOL"
-
-    raise ValueError(f"Unsupported symbol: {symbol}")
-
-
 def get_price_history(symbol: str, days: int = 7) -> pd.DataFrame:
-    symbol = normalize_symbol(symbol)
+    symbol = symbol.lower()
+    if symbol not in SUPPORTED_SYMBOLS:
+        raise ValueError(f"Unsupported symbol: {symbol}")
 
-    errors = []
+    df = fetch_price_history(SUPPORTED_SYMBOLS[symbol], days=days)
+    return df
 
-    # 1️⃣ Try CoinGecko
-    try:
-        df = cg_fetch(SYMBOL_MAP[symbol]["coingecko"], days)
-        if _validate_df(df):
-            return df
-    except Exception as e:
-        errors.append(str(e))
-
-    # 2️⃣ Fallback to yFinance
-    try:
-        df = yf_fetch(SYMBOL_MAP[symbol]["yfinance"], days)
-        if _validate_df(df):
-            return df
-    except Exception as e:
-        errors.append(str(e))
-
-    raise RuntimeError("Price layer failed:\n" + "\n".join(errors))
-
-
-def get_current_price(symbol: str) -> float:
+def get_current_price(symbol: str) -> float | None:
     df = get_price_history(symbol, days=1)
-    return float(df["close"].iloc[-1])
-
-
-def _validate_df(df: pd.DataFrame) -> bool:
-    return (
-        isinstance(df, pd.DataFrame)
-        and not df.empty
-        and "close" in df.columns
-    )
+    if df.empty:
+        return None
+    return float(df["price"].iloc[-1])
