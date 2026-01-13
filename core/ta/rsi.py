@@ -1,29 +1,24 @@
-def calculate_rsi(price_df, period=14):
-    if "close" not in price_df or len(price_df) < period + 1:
-        return {"value": None, "score": 0, "signal": "Unavailable"}
+import pandas as pd
 
-    delta = price_df["close"].diff()
+
+def calculate_rsi(price_df, period=14):
+    close = price_df["close"].astype(float)
+
+    delta = close.diff()
     gain = delta.clip(lower=0)
     loss = -delta.clip(upper=0)
 
-    avg_gain = gain.rolling(period).mean().iloc[-1]
-    avg_loss = loss.rolling(period).mean().iloc[-1]
+    avg_gain = gain.rolling(period).mean()
+    avg_loss = loss.rolling(period).mean()
 
-    if avg_loss == 0:
-        return {"value": 100, "score": -1, "signal": "Overbought"}
-
-    rs = avg_gain / avg_loss
+    rs = avg_gain / avg_loss.replace(0, 1e-9)
     rsi = 100 - (100 / (1 + rs))
 
-    if rsi < 30:
-        signal, score = "Oversold", 1
-    elif rsi > 70:
-        signal, score = "Overbought", -1
-    else:
-        signal, score = "Neutral", 0
+    value = rsi.iloc[-1]
 
-    return {
-        "value": round(rsi, 2),
-        "score": score,
-        "signal": signal
-    }
+    if value > 60:
+        return {"score": 0.3, "label": "RSI: Bullish"}
+    elif value < 40:
+        return {"score": -0.3, "label": "RSI: Bearish"}
+    else:
+        return {"score": 0.0, "label": "RSI: Neutral"}

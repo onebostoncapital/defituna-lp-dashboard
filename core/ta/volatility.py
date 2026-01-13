@@ -1,23 +1,19 @@
-import pandas as pd
+import numpy as np
 
 
-def calculate_volatility_regime(close: pd.Series) -> str:
-    """
-    Classifies volatility regime based on rolling std deviation.
-    """
+def calculate_volatility(price_df):
+    returns = price_df["close"].pct_change().dropna()
 
-    if close is None or len(close) < 30:
-        return "Unavailable"
-
-    returns = close.pct_change().dropna()
-    vol = returns.rolling(20).std().iloc[-1]
-
-    if pd.isna(vol):
-        return "Unavailable"
+    vol = returns.std()
 
     if vol < 0.01:
-        return "Low"
-    elif vol < 0.025:
-        return "Normal"
+        regime = "Low"
+    elif vol < 0.03:
+        regime = "Normal"
     else:
-        return "High"
+        regime = "High"
+
+    return {
+        "volatility": float(vol),
+        "regime": regime
+    }
