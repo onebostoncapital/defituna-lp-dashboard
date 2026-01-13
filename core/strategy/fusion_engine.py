@@ -1,147 +1,108 @@
-from core.ta.ta_aggregator import aggregate_ta_signals
-from core.fa.fa_aggregator import aggregate_fa_signals
+# core/strategy/fusion_engine.py
 
-# Optional engines (import safely)
-try:
-    from core.strategy.multi_range_engine import generate_multi_ranges
-except Exception:
-    generate_multi_ranges = None
+from core.ta.ta_aggregator import aggregate_ta_signals
+from core.ai.regime_detector import detect_market_regime
+from core.ai.confidence_calibrator import calibrate_confidence
+from core.strategy.range_engine import generate_range
+from core.strategy.multi_range_engine import generate_multi_ranges
+
+
+def _select_active_strategy(confidence, regime, ta_trend):
+    """
+    Decide LP strategy based on master rule book.
+    """
+
+    if confidence < 0.35 or regime == "Choppy":
+        return {
+            "mode": "Defensive",
+            "capital_pct": 50,
+            "liquidity_floor_pct": 50,
+            "reason": "Low confidence or choppy regime → capital preservation"
+        }
+
+    if 0.35 <= confidence <= 0.65:
+        return {
+            "mode": "Balanced",
+            "capital_pct": 30,
+            "liquidity_floor_pct": 30,
+            "reason": "Moderate confidence → balanced risk allocation"
+        }
+
+    if confidence > 0.65 and ta_trend == "Bullish":
+        return {
+            "mode": "Aggressive",
+            "capital_pct": 20,
+            "liquidity_floor_pct": 20,
+            "reason": "High confidence + bullish trend → aggressive positioning"
+        }
+
+    # Fallback (safety)
+    return {
+        "mode": "Balanced",
+        "capital_pct": 30,
+        "liquidity_floor_pct": 30,
+        "reason": "Fallback balanced allocation"
+    }
 
 
 def fuse_signals(price_df):
     """
-    MASTER FUSION ENGINE
-    - Never crashes
-    - Always returns full contract
+    Master fusion engine: TA + Regime + Confidence → Strategy + Ranges
     """
 
-    # -----------------------------
-    # SAFETY: Validate price input
-    # -----------------------------
-    if price_df is None or price_df.empty or "close" not in price_df.columns:
-        return _empty_fusion_output(reason="Invalid or missing price data")
-
-    # -----------------------------
-    # TECHNICAL ANALYSIS
-    # -----------------------------
-    try:
-        ta_output = aggregate_ta_signals(price_df)
-    except Exception as e:
-        return _empty_fusion_output(reason=f"TA failure: {e}")
-
-    # -----------------------------
-    # FUNDAMENTAL ANALYSIS
-    # -----------------------------
-    try:
-        fa_output = aggregate_fa_signals()
-    except Exception:
-        fa_output = {
-            "fa_score": 0,
-            "drivers": []
-        }
-
-    # -----------------------------
-    # DIRECTION LOGIC
-    # -----------------------------
+    # --- Technical Analysis ---
+    ta_output = aggregate_ta_signals(price_df)
     ta_score = ta_output.get("ta_score", 0)
+    ta_trend = ta_output.get("trend_strength", "Neutral")
 
-    if ta_score > 1:
-        direction = "Bullish"
-    elif ta_score < -1:
-        direction = "Bearish"
-    else:
-        direction = "Neutral"
+    # --- Market Regime ---
+    regime = detect_market_regime(price_df)
 
-    # -----------------------------
-    # CONFIDENCE (simple & safe)
-    # -----------------------------
-    confidence = min(abs(ta_score) / 5, 1.0)
+    # --- Confidence ---
+    confidence = calibrate_confidence(
+        ta_score=ta_score,
+        regime=regime
+    )
 
-    # -----------------------------
-    # CURRENT PRICE
-    # -----------------------------
-    try:
-        current_price = float(price_df["close"].iloc[-1])
-    except Exception:
-        current_price = 0.0
+    # --- Direction ---
+    direction = "Bullish" if ta_score > 0 else "Bearish" if ta_score < 0 else "Neutral"
 
-    # -----------------------------
-    # MULTI-RANGE ENGINE (SAFE)
-    # -----------------------------
-    ranges = {}
-    if generate_multi_ranges:
-        try:
-            ranges = generate_multi_ranges(
-                current_price=current_price,
-                volatility_pct=ta_output.get("volatility_pct", 0.0),
-                direction=direction
-            )
-        except Exception:
-            ranges = {}
+    # --- Strategy Selection ---
+    strategy = _select_active_strategy(confidence, regime, ta_trend)
 
-    # -----------------------------
-    # ACTIVE MODE SELECTION
-    # -----------------------------
-    active_mode = "Balanced"
-    active_reason = "Default balanced allocation"
+    # --- Single Active Range ---
+    active_range = generate_range(
+        price=float(price_df["close"].iloc[-1]),
+        volatility_pct=ta_output.get("volatility_pct", 0),
+        direction=direction
+    )
 
-    if confidence > 0.7:
-        active_mode = "Aggressive"
-        active_reason = "High confidence signal"
-    elif confidence < 0.3:
-        active_mode = "Defensive"
-        active_reason = "Low confidence signal"
+    # --- Multi-Range (for comparison table) ---
+    multi_ranges = generate_multi_ranges(
+        current_price=float(price_df["close"].iloc[-1]),
+        volatility_pct=ta_output.get("volatility_pct", 0),
+        direction=direction
+    )
 
-    # -----------------------------
-    # FINAL CONTRACT (ALL KEYS)
-    # -----------------------------
     return {
-        # Core state
+        # Market
         "direction": direction,
-        "regime": "Normal",
+        "regime": regime,
         "confidence": round(confidence, 2),
 
-        # Strategy selection
-        "active_mode": active_mode,
-        "active_reason": active_reason,
-        "capital_pct": 100,
-        "liquidity_floor_pct": 20,
+        # Strategy
+        "active_strategy": strategy["mode"],
+        "capital_allocation_pct": strategy["capital_pct"],
+        "liquidity_floor_pct": strategy["liquidity_floor_pct"],
+        "active_reason": strategy["reason"],
 
         # Ranges
-        "ranges": ranges,
+        "active_range": active_range,
+        "multi_ranges": multi_ranges,
 
-        # Technical outputs
+        # TA
         "ta_score": ta_score,
         "ta_drivers": ta_output.get("drivers", []),
-        "volatility_regime": "Normal",
-        "trend_strength": "Neutral",
-
-        # Fundamental outputs
-        "fa_drivers": fa_output.get("drivers", []),
-    }
-
-
-# ======================================================
-# SAFE FALLBACK (NEVER CRASHES DASHBOARD)
-# ======================================================
-
-def _empty_fusion_output(reason="Unknown"):
-    return {
-        "direction": "Neutral",
-        "regime": "Unavailable",
-        "confidence": 0.0,
-
-        "active_mode": "Defensive",
-        "active_reason": reason,
-        "capital_pct": 0,
-        "liquidity_floor_pct": 0,
-
-        "ranges": {},
-
-        "ta_score": 0,
-        "ta_drivers": [],
-        "volatility_regime": "Unavailable",
-        "trend_strength": "Unavailable",
-
-        "fa_drivers": [],
+        "volatility_regime": ta_output.get("volatility_regime", "Normal"),
+        "trend_strength": ta_trend,
     }
